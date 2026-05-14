@@ -363,6 +363,66 @@
       margin-left: auto
     }
 
+    /* ─── DATE RANGE WRAPPER ──────────────────────────────────────── */
+    .date-range-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 5px 10px;
+      box-shadow: var(--sh);
+      transition: border-color .18s, box-shadow .18s
+    }
+
+    .date-range-wrap:focus-within {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, .12)
+    }
+
+    .date-range-wrap input[type="date"] {
+      border: none;
+      outline: none;
+      background: transparent;
+      font-family: var(--f);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      padding: 2px 2px;
+      width: 120px
+    }
+
+    .date-range-wrap input[type="date"]::-webkit-calendar-picker-indicator {
+      opacity: .5;
+      cursor: pointer
+    }
+
+    .date-sep {
+      font-size: 11px;
+      color: var(--faint);
+      font-weight: 600;
+      user-select: none
+    }
+
+    .date-label {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-right: 2px;
+      user-select: none
+    }
+
+    /* Active week badge on the dropdown */
+    .week-active {
+      border-color: var(--blue) !important;
+      color: var(--blue) !important;
+      background: var(--bt) !important
+    }
+
     .btn-reset {
       display: inline-flex;
       align-items: center;
@@ -1035,6 +1095,15 @@
         width: 100%
       }
 
+      .date-range-wrap {
+        width: 100%;
+        grid-column: 1 / -1
+      }
+
+      .date-range-wrap input[type="date"] {
+        width: 100px
+      }
+
       #last-updated {
         grid-column: 1 / -1;
         font-size: 10px
@@ -1238,7 +1307,7 @@
 
   <!-- ═══ HEADER ═══════════════════════════════════════════════════ -->
   <header class="hdr">
-    <div class="eyebrow"><span class="live-dot"></span>Live · Auto-refresh every 60s</div>
+    <div class="eyebrow"><span class="live-dot"></span>Live · Auto-refresh every 120s</div>
     <h1>IMS <b>Performance</b><br />Dashboard</h1>
     <p>Identify your highest-value customers &amp; best-selling SKUs at a glance — filtered, ranked, and insight-ready.
     </p>
@@ -1280,6 +1349,24 @@
         <select class="filter-sel" id="f-party" onchange="applyFilter()">
           <option value="">All Parties</option>
         </select>
+
+        <!-- Week Shortcut -->
+        <select class="filter-sel" id="f-week" onchange="applyWeekPreset()">
+          <option value="">All Weeks</option>
+          <option value="cur">📅 Current Week</option>
+          <option value="last">⬅ Last Week</option>
+          <option value="last2">⏮ Last 2 Weeks</option>
+        </select>
+
+        <!-- Date Range -->
+        <div class="date-range-wrap">
+          <span class="date-label">From</span>
+          <input type="date" id="f-from" onchange="onDateChange()" title="Start date" />
+          <span class="date-sep">→</span>
+          <span class="date-label">To</span>
+          <input type="date" id="f-to" onchange="onDateChange()" title="End date" />
+        </div>
+
         <button class="btn-reset ml-auto" onclick="clearFilter()">
           <svg viewBox="0 0 24 24">
             <polyline points="1 4 1 10 7 10" />
@@ -1502,7 +1589,7 @@
   <script>
     // ═══ LIVE API CONFIG ══════════════════════════════════════════════
     const API_URL = 'https://script.google.com/macros/s/AKfycbxSAfDIrjB7hjvv2vTNGlomYWFM1iU_t1XqlrPvM6zHHsbb5nToOBUtw8h7Xz-MQLRE/exec';
-    const REFRESH_INTERVAL = 60000; // 60 seconds
+    const REFRESH_INTERVAL = 120000; // 120 seconds
 
     // ═══ NORMALISE API ROW (ISO timestamp format) ═════════════════════
     const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1511,7 +1598,7 @@
       const ms = /(\d+[Xx]\d+)/.exec(sku);
       const sz = ms ? ms[1].toUpperCase() : 'OTHER';
       const sty = sku.replace(/\s*\d+[Xx]\d+/, '').trim();
-      const raw = r['Date'] || r['Timestamp'] || '';
+      const raw = r['Timestamp'] || r['Date'] || ''; // FIX: Timestamp is authoritative; Date field has data-entry errors
       const dt = new Date(raw);
       if (isNaN(dt)) return null;
       const dy = dt.getUTCDate();
@@ -1535,7 +1622,7 @@
       const resp = await fetch(API_URL);
       const json = await resp.json();
       const rows = Array.isArray(json) ? json : (json.data || []);
-      if (!rows.length) throw new Error('Empty response');
+      
       return rows.map(normaliseApiRow).filter(Boolean);
     }
 
@@ -1589,14 +1676,87 @@
     // ═══ FILTER ═══════════════════════════════════════════════════════
     let FILTERED = [...DATA];
     function applyFilter() {
-      const mo = v('f-mo'), sz = v('f-sz'), py = v('f-party');
-      FILTERED = DATA.filter(r => (!mo || r.mo === mo) && (!sz || r.sz === sz) && (!py || r.party === py));
+      const mo   = v('f-mo');
+      const sz   = v('f-sz');
+      const py   = v('f-party');
+      const from = v('f-from');
+      const to   = v('f-to');
+      FILTERED = DATA.filter(r => {
+        if (mo   && r.mo      !== mo)   return false;
+        if (sz   && r.sz      !== sz)   return false;
+        if (py   && r.party   !== py)   return false;
+        if (from && r.sk      <  from)  return false;
+        if (to   && r.sk      >  to)    return false;
+        return true;
+      });
       renderAll();
     }
+
     function clearFilter() {
-      ['f-mo', 'f-sz', 'f-party'].forEach(id => el(id).value = '');
-      FILTERED = [...DATA]; renderAll();
+      ['f-mo', 'f-sz', 'f-party', 'f-week'].forEach(id => el(id).value = '');
+      el('f-from').value = '';
+      el('f-to').value   = '';
+      el('f-week').classList.remove('week-active');
+      FILTERED = [...DATA];
+      renderAll();
     }
+
+    // ─── Week preset helpers ───────────────────────────────────────────
+    function toISODate(d) {
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+    }
+
+    function getWeekRange(opt) {
+      const today    = new Date();
+      const dow      = today.getDay();                      // 0=Sun … 6=Sat
+      const toMon    = dow === 0 ? -6 : 1 - dow;           // offset to reach this Monday
+
+      if (opt === 'cur') {
+        const mon = new Date(today); mon.setDate(today.getDate() + toMon);
+        return { from: toISODate(mon), to: toISODate(today) };
+      }
+      if (opt === 'last') {
+        const lMon = new Date(today); lMon.setDate(today.getDate() + toMon - 7);
+        const lSun = new Date(lMon);  lSun.setDate(lMon.getDate() + 6);
+        return { from: toISODate(lMon), to: toISODate(lSun) };
+      }
+      if (opt === 'last2') {
+        const l2Mon = new Date(today); l2Mon.setDate(today.getDate() + toMon - 14);
+        const lSun  = new Date(today); lSun.setDate(today.getDate() + toMon - 1);
+        return { from: toISODate(l2Mon), to: toISODate(lSun) };
+      }
+      return null;
+    }
+
+    function applyWeekPreset() {
+      const opt = v('f-week');
+      const wSel = el('f-week');
+      if (!opt) {
+        // Cleared — reset date fields but keep other filters
+        el('f-from').value = '';
+        el('f-to').value   = '';
+        wSel.classList.remove('week-active');
+        applyFilter();
+        return;
+      }
+      const range = getWeekRange(opt);
+      if (range) {
+        el('f-from').value = range.from;
+        el('f-to').value   = range.to;
+        wSel.classList.add('week-active');
+      }
+      applyFilter();
+    }
+
+    // When user manually edits a date field, clear the week preset
+    function onDateChange() {
+      el('f-week').value = '';
+      el('f-week').classList.remove('week-active');
+      applyFilter();
+    }
+
     function v(id) { return el(id).value }
     function el(id) { return document.getElementById(id) }
     function set(id, t) { const e = el(id); if (e) e.textContent = t }
