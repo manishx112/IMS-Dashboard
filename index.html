@@ -8,6 +8,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap"
     rel="stylesheet" />
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <!-- PDF Export libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <style>
     /* ─── TOKENS ─────────────────────────────────────────────────── */
     :root {
@@ -1300,6 +1303,222 @@
       #ch-months { height: 190px !important }
       #ch-cricket{ height: 200px !important }
     }
+
+    /* ─── PDF EXPORT MENU ─────────────────────────────────────────────── */
+    .export-wrap {
+      position: relative;
+      display: inline-block;
+    }
+    .btn-export {
+      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-family: var(--f);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, .28);
+      transition: all .2s;
+      letter-spacing: .01em;
+    }
+    .btn-export:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(37, 99, 235, .42);
+    }
+    .btn-export:active { transform: translateY(0); }
+    .btn-export svg {
+      width: 14px;
+      height: 14px;
+      stroke: #fff;
+      stroke-width: 2.2;
+      fill: none;
+    }
+    .btn-export .caret {
+      width: 10px; height: 10px;
+      stroke-width: 2.5;
+    }
+
+    .export-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(15, 23, 42, .18), 0 4px 12px rgba(15, 23, 42, .08);
+      padding: 8px;
+      min-width: 280px;
+      z-index: 1000;
+      display: none;
+      animation: emFade .18s ease-out;
+    }
+    .export-menu.show { display: block; }
+    @keyframes emFade {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .em-hd {
+      font-size: 10.5px;
+      font-weight: 800;
+      color: var(--muted);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 6px 12px 4px;
+    }
+    .em-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: background .14s;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+      font-family: var(--f);
+    }
+    .em-item:hover { background: var(--bt); }
+    .em-item:disabled { opacity: .5; cursor: not-allowed; }
+    .em-icon {
+      font-size: 18px;
+      line-height: 1;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .em-body { flex: 1; min-width: 0; }
+    .em-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 1px;
+    }
+    .em-desc {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+      line-height: 1.35;
+    }
+    .em-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 6px 4px;
+    }
+
+    /* Backdrop to close menu on outside click */
+    .em-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      display: none;
+    }
+    .em-backdrop.show { display: block; }
+
+    /* PDF generation toast */
+    .pdf-toast {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--blue);
+      border-radius: 12px;
+      padding: 14px 18px;
+      box-shadow: 0 8px 28px rgba(15, 23, 42, .18);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      animation: tFade .25s ease-out;
+    }
+    .pdf-toast.show { display: flex; }
+    .pdf-toast.success { border-left-color: var(--green); }
+    .pdf-toast.error { border-left-color: var(--rose); }
+    @keyframes tFade {
+      from { opacity: 0; transform: translateX(20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .pdf-spin {
+      width: 16px; height: 16px;
+      border: 2.5px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media(max-width:780px) {
+      .export-menu {
+        right: -10px;
+        min-width: 260px;
+      }
+      .btn-export { padding: 7px 10px; font-size: 11px; }
+      .btn-pdf-mini { padding: 5px 9px !important; font-size: 10.5px !important; }
+      .btn-pdf-mini .lbl-txt { display: none; }
+    }
+
+    /* ─── COMPACT IN-CARD PDF BUTTON (top-right of leaderboards) ───────── */
+    .cc-hd-row {
+      align-items: flex-start;
+    }
+    .cc-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .btn-pdf-mini {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 6px 11px;
+      font-family: var(--f);
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: .01em;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(220, 38, 38, .25);
+      transition: all .18s;
+      white-space: nowrap;
+    }
+    .btn-pdf-mini:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(220, 38, 38, .38);
+    }
+    .btn-pdf-mini:active { transform: translateY(0); }
+    .btn-pdf-mini:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+    .btn-pdf-mini svg {
+      width: 12px;
+      height: 12px;
+      stroke: #fff;
+      stroke-width: 2.4;
+      fill: none;
+    }
+    /* SKU button uses teal accent to match its card eyebrow */
+    .btn-pdf-mini.teal {
+      background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
+      box-shadow: 0 2px 6px rgba(8, 145, 178, .25);
+    }
+    .btn-pdf-mini.teal:hover {
+      box-shadow: 0 4px 12px rgba(8, 145, 178, .42);
+    }
   </style>
 </head>
 
@@ -1381,6 +1600,86 @@
             <path d="M8 16H3v5" />
           </svg>Refresh
         </button>
+
+        <!-- ─── PDF EXPORT MENU ─────────────────────────────── -->
+        <div class="export-wrap">
+          <button class="btn-export" id="btn-export" onclick="toggleExportMenu(event)">
+            <svg viewBox="0 0 24 24">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export PDF
+            <svg class="caret" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="export-menu" id="export-menu">
+            <div class="em-hd">Quick Reports</div>
+            <button class="em-item" onclick="exportPDF('executive')">
+              <span class="em-icon">📊</span>
+              <span class="em-body">
+                <div class="em-title">Executive Summary</div>
+                <div class="em-desc">1-page snapshot · KPIs, top customer & SKU · perfect for WhatsApp / email</div>
+              </span>
+            </button>
+            <button class="em-item" onclick="exportPDF('full')">
+              <span class="em-icon">📑</span>
+              <span class="em-body">
+                <div class="em-title">Complete Dashboard Report</div>
+                <div class="em-desc">All sections · KPIs + leaderboards + full dispatch log</div>
+              </span>
+            </button>
+
+            <div class="em-divider"></div>
+            <div class="em-hd">Leaderboards</div>
+            <button class="em-item" onclick="exportPDF('customer-lb')">
+              <span class="em-icon">🥇</span>
+              <span class="em-body">
+                <div class="em-title">Customer Leaderboard</div>
+                <div class="em-desc">All customers ranked by units · with share %</div>
+              </span>
+            </button>
+            <button class="em-item" onclick="exportPDF('sku-lb')">
+              <span class="em-icon">🎯</span>
+              <span class="em-body">
+                <div class="em-title">SKU Leaderboard</div>
+                <div class="em-desc">All SKUs ranked by quantity · with share %</div>
+              </span>
+            </button>
+
+            <div class="em-divider"></div>
+            <div class="em-hd">Detailed Reports</div>
+            <button class="em-item" onclick="exportPDF('dispatch-log')">
+              <span class="em-icon">📋</span>
+              <span class="em-body">
+                <div class="em-title">Full Dispatch Log</div>
+                <div class="em-desc">Every row · party, SKU, size, bill, qty, date</div>
+              </span>
+            </button>
+            <button class="em-item" onclick="exportPDF('size-breakdown')">
+              <span class="em-icon">📐</span>
+              <span class="em-body">
+                <div class="em-title">Size Breakdown Report</div>
+                <div class="em-desc">Units by size · share % · party-wise breakdown</div>
+              </span>
+            </button>
+            <button class="em-item" onclick="exportPDF('top-customer-detail')">
+              <span class="em-icon">🏆</span>
+              <span class="em-body">
+                <div class="em-title">Top Customer Detail</div>
+                <div class="em-desc">Full SKU-wise + bill-wise breakdown for selected party</div>
+              </span>
+            </button>
+            <button class="em-item" onclick="exportPDF('monthly-compare')">
+              <span class="em-icon">📈</span>
+              <span class="em-body">
+                <div class="em-title">Month-over-Month Comparison</div>
+                <div class="em-desc">All months · totals & growth · party-wise</div>
+              </span>
+            </button>
+          </div>
+        </div>
+        <div class="em-backdrop" id="em-backdrop" onclick="closeExportMenu()"></div>
+
         <span id="last-updated" style="font-size:11px;color:var(--faint);font-weight:500"></span>
       </div>
 
@@ -1485,7 +1784,17 @@
               <div class="cc-hd">🥇 Customer Leaderboard</div>
               <div class="cc-sub">Ranked by total units dispatched — your most valuable buyers</div>
             </div>
-            <div class="cc-badge" id="plb-total">— parties</div>
+            <div class="cc-actions">
+              <div class="cc-badge" id="plb-total">— parties</div>
+              <button class="btn-pdf-mini" onclick="exportPDF('customer-lb')" title="Download Customer Leaderboard as PDF (respects current filters)">
+                <svg viewBox="0 0 24 24">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span class="lbl-txt">PDF</span>
+              </button>
+            </div>
           </div>
           <div class="lb-list" id="lb-party"></div>
         </div>
@@ -1495,7 +1804,17 @@
               <div class="cc-hd">🎯 SKU Leaderboard</div>
               <div class="cc-sub">Ranked by total quantity — your best-selling stock units</div>
             </div>
-            <div class="cc-badge" id="slb-total">— SKUs</div>
+            <div class="cc-actions">
+              <div class="cc-badge" id="slb-total">— SKUs</div>
+              <button class="btn-pdf-mini teal" onclick="exportPDF('sku-lb')" title="Download SKU Leaderboard as PDF (respects current filters)">
+                <svg viewBox="0 0 24 24">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span class="lbl-txt">PDF</span>
+              </button>
+            </div>
           </div>
           <div class="lb-list" id="lb-sku"></div>
         </div>
@@ -1561,6 +1880,14 @@
             <span class="tbl-count" id="tbl-cnt">—</span>
             <input class="tbl-search" type="text" id="tbl-q" placeholder="Search party / SKU / bill…"
               oninput="renderTbl()" />
+            <button class="btn-pdf-mini" onclick="exportPDF('dispatch-log')" title="Download Full Dispatch Log as PDF (respects current filters)">
+              <svg viewBox="0 0 24 24">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span class="lbl-txt">PDF</span>
+            </button>
           </div>
         </div>
         <div class="tbl-scroll">
@@ -1638,8 +1965,11 @@
         });
         populateSels();
         populateCricketMonths();
-        FILTERED = [...DATA];
-        renderAll();
+        // FIX: Re-apply current filters instead of wiping them.
+        // Without this, the 2-min auto-refresh silently wipes the user's filter
+        // (e.g. "Last Week") — so any PDF exported after a refresh would
+        // include the entire dataset.
+        applyFilter();
         const now = new Date();
         const ts = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
         const upEl = document.getElementById('last-updated');
@@ -1653,6 +1983,9 @@
       }
     }
 
+    // Track the auto-refresh interval so PDF export can pause it briefly
+    let _autoRefreshTimer = null;
+
     async function initDashboard() {
       document.getElementById('loading-txt').textContent = 'Fetching live dispatch data…';
       try {
@@ -1663,7 +1996,7 @@
         const ts = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
         const upEl = document.getElementById('last-updated');
         if (upEl) upEl.textContent = 'Updated ' + ts;
-        setInterval(fetchAndRefresh, REFRESH_INTERVAL);
+        _autoRefreshTimer = setInterval(fetchAndRefresh, REFRESH_INTERVAL);
       } catch (e) {
         console.error('Initial load failed:', e);
         document.getElementById('loading-txt').textContent = '⚠ Could not load data. Please check your API / network.';
@@ -2142,7 +2475,7 @@
           <span style="font-size:22px">🎯</span>
           <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">${prevMo || 'Prev'} Total Out (Target)</div>
         </div>
-        <div style="font-size:30px;font-weight:800;color:var(--slate);letter-spacing:-.02em;line-height:1">${prevMo ? fmtN(prevTotal) : '—'}</div>
+        <div style="font-size:30px;font-weight:800;color:var(--slate);letter-spacing:-.02em;line-height:1">${prevMo ? fmtN(prevTotal) : '-'}</div>
         ${prevMo ? `<div style="font-size:11px;color:var(--muted);margin-top:5px">${prevTotal.toLocaleString()} units · ${prevCalDays}-day month</div>
         <div style="font-size:11px;color:var(--muted)">Avg/day: <b>${fmtN(Math.round(prevTotal/prevCalDays))}</b> units</div>` : ''}
       </div>
@@ -2161,7 +2494,7 @@
       <!-- Card 3: Target achieved % -->
       <div style="background:${achPct === null ? 'var(--bg)' : achPct >= 100 ? 'var(--gt)' : 'var(--at)'};border:1.5px solid var(--border);border-radius:14px;padding:16px 18px;transition:box-shadow .2s" onmouseenter="this.style.boxShadow='var(--sh-h)'" onmouseleave="this.style.boxShadow='none'">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-          <span style="font-size:22px">${achPct === null ? '—' : achPct >= 100 ? '✅' : '⏳'}</span>
+          <span style="font-size:22px">${achPct === null ? '-' : achPct >= 100 ? '✅' : '⏳'}</span>
           <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Target Achieved (So Far)</div>
         </div>
         <div style="font-size:30px;font-weight:800;color:${achPct === null ? 'var(--muted)' : achPct >= 100 ? 'var(--green)' : 'var(--amber)'};letter-spacing:-.02em;line-height:1">${achPct !== null ? achPct.toFixed(1)+'%' : 'N/A'}</div>
@@ -2246,7 +2579,1035 @@
         });
       }, 150);
     });
+
+    // ═════════════════════════════════════════════════════════════════════
+    // ═══ PDF EXPORT MODULE ═══════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════════════════════
+
+    // ─── Toast / Menu helpers ─────────────────────────────────────────────
+    function toggleExportMenu(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('export-menu');
+      const bd = document.getElementById('em-backdrop');
+      const isOpen = menu.classList.contains('show');
+      if (isOpen) { closeExportMenu(); } else {
+        menu.classList.add('show');
+        bd.classList.add('show');
+      }
+    }
+    function closeExportMenu() {
+      document.getElementById('export-menu').classList.remove('show');
+      document.getElementById('em-backdrop').classList.remove('show');
+    }
+    function showToast(msg, mode) {
+      const t = document.getElementById('pdf-toast');
+      const sp = document.getElementById('pdf-toast-spin');
+      const ic = document.getElementById('pdf-toast-icon');
+      t.classList.remove('success', 'error');
+      document.getElementById('pdf-toast-msg').textContent = msg;
+      if (mode === 'success') {
+        sp.style.display = 'none';
+        ic.style.display = 'inline-block';
+        ic.textContent = '✓';
+        t.classList.add('success');
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2800);
+      } else if (mode === 'error') {
+        sp.style.display = 'none';
+        ic.style.display = 'inline-block';
+        ic.textContent = '⚠';
+        t.classList.add('error');
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 4000);
+      } else {
+        sp.style.display = 'inline-block';
+        ic.style.display = 'none';
+        t.classList.add('show');
+      }
+    }
+    function hideToast() { document.getElementById('pdf-toast').classList.remove('show'); }
+
+    // ─── PDF Theming Constants ────────────────────────────────────────────
+    const PDF_COL = {
+      blue: [37, 99, 235],
+      blueLight: [239, 246, 255],
+      teal: [8, 145, 178],
+      green: [5, 150, 105],
+      amber: [217, 119, 6],
+      rose: [225, 29, 72],
+      text: [15, 23, 42],
+      sub: [51, 65, 85],
+      muted: [100, 116, 139],
+      faint: [148, 163, 184],
+      border: [226, 232, 240],
+      bgLight: [248, 250, 252],
+      gold: [234, 179, 8],
+      silver: [148, 163, 184],
+      bronze: [180, 83, 9]
+    };
+
+    // ─── Filter description (shown on every PDF) ──────────────────────────
+    function getActiveFilterText() {
+      const mo = v('f-mo'); const sz = v('f-sz'); const py = v('f-party');
+      const from = v('f-from'); const to = v('f-to');
+      const parts = [];
+      if (from && to) parts.push(`${from} to ${to}`);
+      else if (from) parts.push(`From ${from}`);
+      else if (to)   parts.push(`Until ${to}`);
+      if (mo) parts.push(`Month: ${mo}`);
+      if (sz) parts.push(`Size: ${sz}`);
+      if (py) parts.push(`Party: ${py}`);
+      return parts.length ? parts.join('  |  ') : 'All Data (no filters applied)';
+    }
+    function todayStr() {
+      const d = new Date();
+      return `${String(d.getDate()).padStart(2,'0')}-${MONTH_NAMES[d.getMonth()+1]}-${d.getFullYear()}`;
+    }
+    function nowStr() {
+      const d = new Date();
+      return d.toLocaleString('en-IN', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short', year:'numeric' });
+    }
+    function fmtFull(n) { return Number(n).toLocaleString('en-IN'); }
+
+    // ─── PDF Header / Footer painters ─────────────────────────────────────
+    // Strip emojis & non-ASCII glyphs that break in standard PDF fonts
+    function clean(s) {
+      if (!s) return '';
+      return String(s)
+        // Remove emoji and pictographic symbols
+        .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+        .replace(/[\u{2600}-\u{27BF}]/gu, '')
+        .replace(/[\u{1F000}-\u{1F2FF}]/gu, '')
+        // Replace common typographic chars with ASCII equivalents
+        .replace(/[\u2192\u27A1]/g, 'to')   // arrows
+        .replace(/[\u2022\u00B7]/g, '-')     // bullets
+        .replace(/[\u2013\u2014]/g, '-')     // en/em dash
+        .replace(/[\u2018\u2019]/g, "'")     // curly single quotes
+        .replace(/[\u201C\u201D]/g, '"')     // curly double quotes
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function drawHeader(doc, title, subtitle) {
+      const pw = doc.internal.pageSize.getWidth();
+      title = clean(title); subtitle = clean(subtitle);
+
+      // Main blue banner
+      doc.setFillColor(...PDF_COL.blue);
+      doc.rect(0, 0, pw, 26, 'F');
+
+      // Title (left)
+      doc.setTextColor(255,255,255);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(17);
+      doc.text(title, 14, 16);
+
+      // Brand line (right)
+      doc.setFontSize(9);
+      doc.setFont('helvetica','normal');
+      doc.setTextColor(186, 211, 252);
+      doc.text('DISPATCH PERFORMANCE REPORT', pw - 14, 11, { align:'right' });
+      doc.setFontSize(8);
+      doc.setTextColor(219, 234, 254);
+      doc.text(clean('Generated ' + nowStr()), pw - 14, 18, { align:'right' });
+
+      // Light info strip below banner
+      doc.setFillColor(...PDF_COL.blueLight);
+      doc.rect(0, 26, pw, 12, 'F');
+
+      // Subtitle (left of info strip)
+      doc.setTextColor(...PDF_COL.sub);
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica','bold');
+      doc.text(subtitle || '', 14, 33.5);
+
+      // Filter line (right of info strip)
+      const filterTxt = clean(PDF_FILTER_TEXT || getActiveFilterText());
+      const recCount = (PDF_DATA && PDF_DATA.length) ? PDF_DATA.length.toLocaleString('en-IN') : '0';
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...PDF_COL.muted);
+      doc.text('FILTER', pw - 14, 30.5, { align:'right' });
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...PDF_COL.sub);
+      const ft = filterTxt.length > 60 ? filterTxt.slice(0, 58) + '...' : filterTxt;
+      doc.text(ft, pw - 14, 34.5, { align:'right' });
+      doc.setFont('helvetica','normal');
+      doc.setTextColor(...PDF_COL.muted);
+      doc.setFontSize(7.5);
+      doc.text(`${recCount} records included`, pw - 14, 38, { align:'right' });
+
+      // Thin accent line at very bottom of header
+      doc.setDrawColor(...PDF_COL.blue);
+      doc.setLineWidth(0.5);
+      doc.line(0, 39.5, pw, 39.5);
+    }
+    function drawFooter(doc) {
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+      const total = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= total; i++) {
+        doc.setPage(i);
+        doc.setDrawColor(...PDF_COL.border);
+        doc.setLineWidth(0.3);
+        doc.line(14, ph - 13, pw - 14, ph - 13);
+        doc.setFontSize(7.5);
+        doc.setTextColor(...PDF_COL.faint);
+        doc.setFont('helvetica','normal');
+        doc.text('CONFIDENTIAL - For internal use only', 14, ph - 7.5);
+        doc.text(`Page ${i} of ${total}`, pw - 14, ph - 7.5, { align:'right' });
+      }
+    }
+
+    // ─── Section heading drawer (used in multi-section reports) ───────────
+    function drawSectionTitle(doc, y, text, color) {
+      const pw = doc.internal.pageSize.getWidth();
+      doc.setFillColor(...(color || PDF_COL.blue));
+      doc.rect(14, y, 3, 7, 'F');
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(12);
+      doc.setTextColor(...PDF_COL.text);
+      doc.text(text, 20, y + 5.5);
+      return y + 11;
+    }
+
+    // ─── KPI BOX painter (executive summary) ──────────────────────────────
+    function drawKpiBox(doc, x, y, w, h, label, value, sub, color) {
+      doc.setFillColor(255,255,255);
+      doc.setDrawColor(...PDF_COL.border);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(x, y, w, h, 2, 2, 'FD');
+      // Color stripe top
+      doc.setFillColor(...color);
+      doc.roundedRect(x, y, w, 1.6, 0.6, 0.6, 'F');
+      // Label
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...PDF_COL.muted);
+      doc.text(label.toUpperCase(), x + 4, y + 7);
+      // Value
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(16);
+      doc.setTextColor(...PDF_COL.text);
+      doc.text(String(value), x + 4, y + 17);
+      // Subtext
+      if (sub) {
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(8);
+        doc.setTextColor(...PDF_COL.muted);
+        const lines = doc.splitTextToSize(sub, w - 8);
+        doc.text(lines, x + 4, y + 23);
+      }
+    }
+
+    // ─── Empty-state PDF guard ────────────────────────────────────────────
+    function ensureData() {
+      if (!FILTERED || FILTERED.length === 0) {
+        showToast('No data to export — please adjust filters', 'error');
+        return false;
+      }
+      return true;
+    }
+
+    // ─── Helper: get leaderboard sorted array ─────────────────────────────
+    function getLeaderboard(key) {
+      const pm = groupBy(PDF_DATA, key);
+      const total = PDF_DATA.reduce((a,r) => a + r.qty, 0) || 1;
+      return Object.entries(pm)
+        .sort((a,b) => b[1] - a[1])
+        .map(([name, qty], i) => ({
+          rank: i + 1, name, qty,
+          share: ((qty/total)*100).toFixed(2)
+        }));
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // ═══ MAIN EXPORT DISPATCHER ══════════════════════════════════════════
+    // ═════════════════════════════════════════════════════════════════════
+    async function exportPDF(kind) {
+      closeExportMenu();
+      // SAFEGUARD 1: Re-apply active filters right before export so FILTERED is
+      // guaranteed to match exactly what's on screen.
+      applyFilter();
+      if (!ensureData()) return;
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        showToast('PDF library not loaded — check connection', 'error');
+        return;
+      }
+
+      // SAFEGUARD 2: Snapshot the filtered data into a local-scoped variable
+      // so async work below (toast yield, Plotly redraws) cannot have its
+      // FILTERED state wiped by a background auto-refresh tick. The PDF
+      // builders read PDF_DATA (a const reference) instead of FILTERED for
+      // this single export call.
+      const exportSnapshot = FILTERED.slice();
+      const exportFilters  = getActiveFilterText();
+
+      // SAFEGUARD 3: Pause the 2-minute auto-refresh while generating the PDF.
+      const autoRefreshWasRunning = !!_autoRefreshTimer;
+      if (autoRefreshWasRunning) {
+        clearInterval(_autoRefreshTimer);
+        _autoRefreshTimer = null;
+      }
+
+      // Make snapshot available to builder functions
+      PDF_DATA = exportSnapshot;
+      PDF_FILTER_TEXT = exportFilters;
+
+      showToast(`Generating PDF · ${exportSnapshot.length.toLocaleString()} records`);
+      // Yield so the toast renders before heavy work
+      await new Promise(r => setTimeout(r, 30));
+
+      try {
+        switch (kind) {
+          case 'executive':           buildExecutivePDF(); break;
+          case 'full':                buildFullDashboardPDF(); break;
+          case 'customer-lb':         buildLeaderboardPDF('party'); break;
+          case 'sku-lb':              buildLeaderboardPDF('sku'); break;
+          case 'dispatch-log':        buildDispatchLogPDF(); break;
+          case 'size-breakdown':      buildSizeBreakdownPDF(); break;
+          case 'top-customer-detail': buildTopCustomerDetailPDF(); break;
+          case 'monthly-compare':     buildMonthlyComparePDF(); break;
+          default: showToast('Unknown report', 'error'); return;
+        }
+        showToast(`PDF downloaded · ${exportSnapshot.length.toLocaleString()} records included`, 'success');
+      } catch (err) {
+        console.error('PDF gen error:', err);
+        showToast('Failed to generate PDF — ' + (err.message || 'unknown error'), 'error');
+      } finally {
+        // Restore auto-refresh
+        if (autoRefreshWasRunning && !_autoRefreshTimer) {
+          _autoRefreshTimer = setInterval(fetchAndRefresh, REFRESH_INTERVAL);
+        }
+      }
+    }
+
+    // Snapshot variables used by all PDF builders. Set fresh at start of every
+    // exportPDF() call. The builders MUST read from these — never FILTERED
+    // directly — to guarantee filter integrity even if async events fire mid-render.
+    let PDF_DATA = [];
+    let PDF_FILTER_TEXT = '';
+
+    // ═════════════════════════════════════════════════════════════════════
+    // ═══ 1. EXECUTIVE SUMMARY (1-page snapshot) ══════════════════════════
+    // ═════════════════════════════════════════════════════════════════════
+    function buildExecutivePDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+      const pw = doc.internal.pageSize.getWidth();
+
+      drawHeader(doc, 'Executive Summary', 'Dispatch performance snapshot');
+
+      // ─── KPI grid ───
+      const total = PDF_DATA.reduce((a,r) => a + r.qty, 0);
+      const parties = new Set(PDF_DATA.map(r => r.party)).size;
+      const skus = new Set(PDF_DATA.map(r => r.sku)).size;
+      const bills = new Set(PDF_DATA.map(r => r.bill)).size;
+      const days = new Set(PDF_DATA.map(r => r.sk)).size;
+      const avgPerDay = days ? Math.round(total / days) : 0;
+
+      let y = 47;
+      const gap = 4;
+      const boxW = (pw - 28 - gap*2) / 3;
+      const boxH = 28;
+      drawKpiBox(doc, 14,              y, boxW, boxH, 'Total Units',   fmtFull(total),    `Across ${PDF_DATA.length.toLocaleString()} records`, PDF_COL.blue);
+      drawKpiBox(doc, 14+boxW+gap,     y, boxW, boxH, 'Unique Customers', fmtFull(parties), `${bills} bills issued`, PDF_COL.teal);
+      drawKpiBox(doc, 14+(boxW+gap)*2, y, boxW, boxH, 'Unique SKUs',   fmtFull(skus),     `Across ${days} dispatch days`, PDF_COL.green);
+      y += boxH + 4;
+      drawKpiBox(doc, 14,              y, boxW, boxH, 'Avg Units / Day', fmtFull(avgPerDay), `Daily run-rate`, PDF_COL.amber);
+      drawKpiBox(doc, 14+boxW+gap,     y, boxW, boxH, 'Active Days',     fmtFull(days),      `Days with dispatch`, PDF_COL.violet || [124,58,237]);
+      drawKpiBox(doc, 14+(boxW+gap)*2, y, boxW, boxH, 'Total Bills',     fmtFull(bills),     `Bills generated`,    PDF_COL.rose);
+      y += boxH + 8;
+
+      // ─── Champions strip ───
+      const partyLB = getLeaderboard('party');
+      const skuLB = getLeaderboard('sku');
+      const topP = partyLB[0]; const topS = skuLB[0];
+
+      doc.setFillColor(...PDF_COL.blueLight);
+      doc.setDrawColor(...PDF_COL.blue);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(14, y, (pw-32)/2, 26, 2.5, 2.5, 'FD');
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(8);
+      doc.setTextColor(...PDF_COL.blue);
+      doc.text('TOP CUSTOMER  -  #1 BUYER', 18, y+6);
+      doc.setFontSize(13);
+      doc.setTextColor(...PDF_COL.text);
+      const tpName = doc.splitTextToSize(topP ? topP.name : '-', (pw-32)/2 - 8);
+      doc.text(tpName[0] || '-', 18, y+13);
+      doc.setFontSize(11);
+      doc.setTextColor(...PDF_COL.blue);
+      doc.text(topP ? `${fmtFull(topP.qty)} units  |  ${topP.share}% share` : '', 18, y+20);
+
+      const sx = 14 + (pw-32)/2 + 4;
+      doc.setFillColor(236, 254, 255);
+      doc.setDrawColor(...PDF_COL.teal);
+      doc.roundedRect(sx, y, (pw-32)/2 - 4, 26, 2.5, 2.5, 'FD');
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(8);
+      doc.setTextColor(...PDF_COL.teal);
+      doc.text('BEST-SELLING SKU  -  #1 PRODUCT', sx+4, y+6);
+      doc.setFontSize(13);
+      doc.setTextColor(...PDF_COL.text);
+      const tsName = doc.splitTextToSize(topS ? topS.name : '-', (pw-32)/2 - 12);
+      doc.text(tsName[0] || '-', sx+4, y+13);
+      doc.setFontSize(11);
+      doc.setTextColor(...PDF_COL.teal);
+      doc.text(topS ? `${fmtFull(topS.qty)} units  |  ${fmtFull(topS.share)}% share` : '', sx+4, y+20);
+      y += 32;
+
+      // ─── Top 5 Customers + Top 5 SKUs side-by-side ───
+      const top5P = partyLB.slice(0,5);
+      const top5S = skuLB.slice(0,5);
+
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'Top 5 Customers', 'Units', 'Share']],
+        body: top5P.map(r => [r.rank, r.name, fmtFull(r.qty), r.share + '%']),
+        theme: 'grid',
+        margin: { left: 14, right: pw/2 + 2 },
+        tableWidth: (pw - 32) / 2,
+        styles: { font:'helvetica', fontSize:9, cellPadding:2.2, textColor: PDF_COL.text },
+        headStyles: { fillColor: PDF_COL.blue, textColor: [255,255,255], fontStyle:'bold', fontSize:9 },
+        columnStyles: { 0:{cellWidth:8,halign:'center'}, 2:{halign:'right'}, 3:{halign:'right'} },
+        alternateRowStyles: { fillColor: PDF_COL.bgLight }
+      });
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'Top 5 SKUs', 'Units', 'Share']],
+        body: top5S.map(r => [r.rank, r.name, fmtFull(r.qty), r.share + '%']),
+        theme: 'grid',
+        margin: { left: pw/2 + 2, right: 14 },
+        tableWidth: (pw - 32) / 2,
+        styles: { font:'helvetica', fontSize:9, cellPadding:2.2, textColor: PDF_COL.text },
+        headStyles: { fillColor: PDF_COL.teal, textColor: [255,255,255], fontStyle:'bold', fontSize:9 },
+        columnStyles: { 0:{cellWidth:8,halign:'center'}, 2:{halign:'right'}, 3:{halign:'right'} },
+        alternateRowStyles: { fillColor: PDF_COL.bgLight }
+      });
+
+      drawFooter(doc);
+      doc.save(`Executive-Summary_${todayStr()}.pdf`);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // ═══ 2. CUSTOMER / SKU LEADERBOARD PDF ═══════════════════════════════
+    // ═════════════════════════════════════════════════════════════════════
+    function buildLeaderboardPDF(key) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+      const pw = doc.internal.pageSize.getWidth();
+
+      const isParty = key === 'party';
+      const title = isParty ? 'Customer Leaderboard' : 'SKU Leaderboard';
+      const subtitle = isParty
+        ? 'Ranked by total units dispatched - most valuable buyers'
+        : 'Ranked by total quantity - best-selling stock units';
+
+      drawHeader(doc, title, subtitle);
+
+      const data = getLeaderboard(key);
+      const total = data.reduce((a,r) => a + r.qty, 0);
+
+      // ─── Summary metric strip (4 boxes) ───
+      let y = 47;
+      const stripH = 22;
+      const boxW = (pw - 28) / 4;
+      const accentColor = isParty ? PDF_COL.blue : PDF_COL.teal;
+
+      // Four metric boxes side by side
+      const metrics = [
+        { label: isParty ? 'TOTAL CUSTOMERS' : 'TOTAL SKUs', value: fmtFull(data.length), sub: 'unique entries' },
+        { label: 'TOTAL UNITS', value: fmtFull(total), sub: 'dispatched' },
+        { label: '#1 RANK', value: data[0] ? trunc(data[0].name, 18) : '-', sub: data[0] ? fmtFull(data[0].qty) + ' units' : '', valueSize: 11 },
+        { label: '#1 SHARE', value: data[0] ? data[0].share + '%' : '-', sub: 'of total', color: accentColor }
+      ];
+
+      metrics.forEach((m, i) => {
+        const x = 14 + i * boxW;
+        // White box with subtle border
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(...PDF_COL.border);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(x, y, boxW - 2, stripH, 2, 2, 'FD');
+        // Color accent on left edge
+        doc.setFillColor(...(m.color || accentColor));
+        doc.rect(x, y, 1.2, stripH, 'F');
+        // Label (small caps, muted)
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(7);
+        doc.setTextColor(...PDF_COL.muted);
+        doc.text(m.label, x + 5, y + 6);
+        // Value (bold, primary)
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(m.valueSize || 13);
+        doc.setTextColor(...(m.color || PDF_COL.text));
+        doc.text(String(m.value), x + 5, y + 14);
+        // Sub
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(7);
+        doc.setTextColor(...PDF_COL.muted);
+        doc.text(m.sub || '', x + 5, y + 19);
+      });
+      y += stripH + 8;
+
+      // ─── Leaderboard table ───
+      const rows = data.map(r => {
+        const rankLabel = r.rank === 1 ? '1st' : r.rank === 2 ? '2nd' : r.rank === 3 ? '3rd' : String(r.rank);
+        return [rankLabel, r.name, fmtFull(r.qty), r.share + '%'];
+      });
+
+      doc.autoTable({
+        startY: y,
+        head: [['Rank', isParty ? 'Customer Name' : 'SKU', 'Quantity', 'Share %']],
+        body: rows,
+        theme: 'plain',
+        margin: { left: 14, right: 14 },
+        styles: {
+          font: 'helvetica', fontSize: 10, cellPadding: 3.2,
+          textColor: PDF_COL.text, lineColor: PDF_COL.border, lineWidth: 0.15,
+          valign: 'middle'
+        },
+        headStyles: {
+          fillColor: accentColor, textColor: [255,255,255], fontStyle: 'bold',
+          halign: 'left', fontSize: 9.5, cellPadding: { top:3.5, bottom:3.5, left:5, right:5 }
+        },
+        columnStyles: {
+          0: { cellWidth: 22, halign: 'left', fontStyle: 'bold', cellPadding: { left:5, top:3.2, bottom:3.2 } },
+          1: { cellWidth: 'auto', cellPadding: { left:2, top:3.2, bottom:3.2 } },
+          2: { cellWidth: 32, halign: 'right', fontStyle: 'bold', cellPadding: { right:5, top:3.2, bottom:3.2 } },
+          3: { cellWidth: 26, halign: 'right', textColor: PDF_COL.muted, cellPadding: { right:5, top:3.2, bottom:3.2 } }
+        },
+        alternateRowStyles: { fillColor: [250, 251, 253] },
+        didParseCell: function(d) {
+          // Highlight top 3 with subtle medal-tier backgrounds
+          if (d.section === 'body' && d.row.index < 3) {
+            const tints = [
+              [254, 249, 195], // gold tint
+              [243, 244, 246], // silver tint
+              [254, 235, 200]  // bronze tint
+            ];
+            const accents = [
+              [202, 138, 4],   // gold text
+              [100, 116, 139], // silver text
+              [180, 83, 9]     // bronze text
+            ];
+            d.cell.styles.fillColor = tints[d.row.index];
+            if (d.column.index === 0) {
+              d.cell.styles.textColor = accents[d.row.index];
+              d.cell.styles.fontSize = 10.5;
+            }
+          }
+        },
+        didDrawPage: function() { drawHeader(doc, title, subtitle); }
+      });
+
+      drawFooter(doc);
+      const fname = isParty ? `Customer-Leaderboard_${todayStr()}.pdf` : `SKU-Leaderboard_${todayStr()}.pdf`;
+      doc.save(fname);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // ═══ 3. FULL DASHBOARD REPORT ════════════════════════════════════════
+    // ═════════════════════════════════════════════════════════════════════
+    function buildFullDashboardPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+
+      drawHeader(doc, 'Complete Dashboard Report', 'All metrics, leaderboards and dispatch records');
+
+      // ── KPIs ──
+      const total = PDF_DATA.reduce((a,r) => a + r.qty, 0);
+      const parties = new Set(PDF_DATA.map(r => r.party)).size;
+      const skus = new Set(PDF_DATA.map(r => r.sku)).size;
+      const bills = new Set(PDF_DATA.map(r => r.bill)).size;
+      const days = new Set(PDF_DATA.map(r => r.sk)).size;
+      const avgPerDay = days ? Math.round(total / days) : 0;
+
+      let y = 47;
+      y = drawSectionTitle(doc, y, '1. Key Performance Indicators', PDF_COL.blue);
+      const gap = 4;
+      const boxW = (pw - 28 - gap*2) / 3;
+      const boxH = 24;
+      drawKpiBox(doc, 14,              y, boxW, boxH, 'Total Units',   fmtFull(total),    `${PDF_DATA.length.toLocaleString()} records`, PDF_COL.blue);
+      drawKpiBox(doc, 14+boxW+gap,     y, boxW, boxH, 'Customers',     fmtFull(parties),  `${bills} bills`, PDF_COL.teal);
+      drawKpiBox(doc, 14+(boxW+gap)*2, y, boxW, boxH, 'Unique SKUs',   fmtFull(skus),     `${days} days`, PDF_COL.green);
+      y += boxH + 3;
+      drawKpiBox(doc, 14,              y, boxW, boxH, 'Avg / Day',     fmtFull(avgPerDay), `Daily rate`, PDF_COL.amber);
+      drawKpiBox(doc, 14+boxW+gap,     y, boxW, boxH, 'Active Days',   fmtFull(days),      `With dispatch`, [124,58,237]);
+      drawKpiBox(doc, 14+(boxW+gap)*2, y, boxW, boxH, 'Total Bills',   fmtFull(bills),     `Generated`, PDF_COL.rose);
+      y += boxH + 8;
+
+      // ── Customer Leaderboard (Top 20) ──
+      y = drawSectionTitle(doc, y, '2. Customer Leaderboard (Top 20)', PDF_COL.blue);
+      const partyLB = getLeaderboard('party').slice(0, 20);
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'Customer', 'Units', 'Share %']],
+        body: partyLB.map(r => [r.rank, r.name, fmtFull(r.qty), r.share + '%']),
+        theme: 'grid',
+        margin: { left: 14, right: 14 },
+        styles: { font:'helvetica', fontSize:9, cellPadding:2, textColor: PDF_COL.text },
+        headStyles: { fillColor: PDF_COL.blue, textColor:[255,255,255], fontStyle:'bold' },
+        columnStyles: { 0:{cellWidth:10,halign:'center'}, 2:{cellWidth:30,halign:'right',fontStyle:'bold'}, 3:{cellWidth:22,halign:'right'} },
+        alternateRowStyles: { fillColor: PDF_COL.bgLight },
+        didDrawPage: function() { drawHeader(doc, 'Complete Dashboard Report', 'All metrics, leaderboards and dispatch records'); }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      // ── SKU Leaderboard (Top 20) ──
+      if (y > ph - 60) { doc.addPage(); y = 47; }
+      y = drawSectionTitle(doc, y, '3. SKU Leaderboard (Top 20)', PDF_COL.teal);
+      const skuLB = getLeaderboard('sku').slice(0, 20);
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'SKU', 'Units', 'Share %']],
+        body: skuLB.map(r => [r.rank, r.name, fmtFull(r.qty), r.share + '%']),
+        theme: 'grid',
+        margin: { left: 14, right: 14 },
+        styles: { font:'helvetica', fontSize:9, cellPadding:2, textColor: PDF_COL.text },
+        headStyles: { fillColor: PDF_COL.teal, textColor:[255,255,255], fontStyle:'bold' },
+        columnStyles: { 0:{cellWidth:10,halign:'center'}, 2:{cellWidth:30,halign:'right',fontStyle:'bold'}, 3:{cellWidth:22,halign:'right'} },
+        alternateRowStyles: { fillColor: PDF_COL.bgLight },
+        didDrawPage: function() { drawHeader(doc, 'Complete Dashboard Report', 'All metrics, leaderboards and dispatch records'); }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      // ── Size breakdown ──
+      if (y > ph - 60) { doc.addPage(); y = 47; }
+      y = drawSectionTitle(doc, y, '4. Size Breakdown', PDF_COL.green);
+      const sizeM = groupBy(PDF_DATA, 'sz');
+      const sizeArr = Object.entries(sizeM).sort((a,b) => b[1] - a[1]);
+      doc.autoTable({
+        startY: y,
+        head: [['Size', 'Units', 'Share %', 'Customers', 'SKUs']],
+        body: sizeArr.map(([sz, qty]) => {
+          const recs = PDF_DATA.filter(r => r.sz === sz);
+          const sP = new Set(recs.map(r => r.party)).size;
+          const sS = new Set(recs.map(r => r.sku)).size;
+          return [sz, fmtFull(qty), ((qty/total)*100).toFixed(2) + '%', sP, sS];
+        }),
+        theme: 'grid',
+        margin: { left: 14, right: 14 },
+        styles: { font:'helvetica', fontSize:9, cellPadding:2.2, textColor: PDF_COL.text },
+        headStyles: { fillColor: PDF_COL.green, textColor:[255,255,255], fontStyle:'bold' },
+        columnStyles: { 1:{halign:'right',fontStyle:'bold'}, 2:{halign:'right'}, 3:{halign:'right'}, 4:{halign:'right'} },
+        alternateRowStyles: { fillColor: PDF_COL.bgLight },
+        didDrawPage: function() { drawHeader(doc, 'Complete Dashboard Report', 'All metrics, leaderboards and dispatch records'); }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      // ── Full dispatch log ──
+      doc.addPage();
+      y = 47;
+      y = drawSectionTitle(doc, y, '5. Full Dispatch Log', PDF_COL.amber);
+      const logRows = PDF_DATA.slice()
+        .sort((a,b) => a.sk.localeCompare(b.sk))
+        .map((r, i) => [i+1, r.d, r.party, r.sku, r.sz, r.bill, fmtFull(r.qty)]);
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'Date', 'Party', 'SKU', 'Size', 'Bill', 'Qty']],
+        body: logRows,
+        theme: 'striped',
+        margin: { left: 14, right: 14 },
+        styles: { font:'helvetica', fontSize:8, cellPadding:1.6, textColor: PDF_COL.text, overflow:'linebreak' },
+        headStyles: { fillColor: PDF_COL.amber, textColor:[255,255,255], fontStyle:'bold' },
+        columnStyles: {
+          0: { cellWidth: 10, halign:'center' },
+          1: { cellWidth: 18 },
+          2: { cellWidth: 'auto' },
+          3: { cellWidth: 38 },
+          4: { cellWidth: 16, halign:'center' },
+          5: { cellWidth: 22 },
+          6: { cellWidth: 16, halign:'right', fontStyle:'bold' }
+        },
+        alternateRowStyles: { fillColor: PDF_COL.bgLight },
+        didDrawPage: function() { drawHeader(doc, 'Complete Dashboard Report', 'All metrics, leaderboards and dispatch records'); }
+      });
+
+      drawFooter(doc);
+      doc.save(`Complete-Dashboard-Report_${todayStr()}.pdf`);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // ═══ 4. FULL DISPATCH LOG (standalone) ═══════════════════════════════
+    // ═════════════════════════════════════════════════════════════════════
+    function buildDispatchLogPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+      const pw = doc.internal.pageSize.getWidth();
+
+      drawHeader(doc, 'Full Dispatch Log', 'Complete record of all outbound dispatches');
+
+      const total = PDF_DATA.reduce((a,r) => a + r.qty, 0);
+
+      // Summary
+      let y = 47;
+      doc.setFillColor(...PDF_COL.blueLight);
+      doc.roundedRect(14, y, pw - 28, 14, 2, 2, 'F');
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(9);
+      doc.setTextColor(...PDF_COL.muted);
+      doc.text('TOTAL RECORDS', 20, y+5.5);
+      doc.text('TOTAL UNITS', 80, y+5.5);
+      doc.text('CUSTOMERS', 140, y+5.5);
+      doc.text('SKUs', 195, y+5.5);
+      doc.text('BILLS', 240, y+5.5);
+      doc.setFontSize(11.5);
+      doc.setTextColor(...PDF_COL.text);
+      doc.text(fmtFull(PDF_DATA.length), 20, y+11);
+      doc.text(fmtFull(total), 80, y+11);
+      doc.text(String(new Set(PDF_DATA.map(r => r.party)).size), 140, y+11);
+      doc.text(String(new Set(PDF_DATA.map(r => r.sku)).size), 195, y+11);
+      doc.text(String(new Set(PDF_DATA.map(r => r.bill)).size), 240, y+11);
+      y += 20;
+
+      const rows = PDF_DATA.slice()
+        .sort((a,b) => a.sk.localeCompare(b.sk))
+        .map((r,i) => [i+1, r.d, r.party, r.sku, r.sty, r.sz, r.bill, r.mo, fmtFull(r.qty)]);
+
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'Date', 'Party Name', 'SKU', 'Style', 'Size', 'Bill', 'Month', 'Qty']],
+        body: rows,
+        theme: 'striped',
+        margin: { left: 14, right: 14 },
+        styles: { font:'helvetica', fontSize:8.5, cellPadding:1.8, textColor: PDF_COL.text, overflow:'linebreak' },
+        headStyles: { fillColor: PDF_COL.blue, textColor:[255,255,255], fontStyle:'bold' },
+        columnStyles: {
+          0: { cellWidth: 10, halign:'center' },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 'auto' },
+          3: { cellWidth: 40 },
+          4: { cellWidth: 26 },
+          5: { cellWidth: 16, halign:'center' },
+          6: { cellWidth: 26 },
+          7: { cellWidth: 16, halign:'center' },
+          8: { cellWidth: 18, halign:'right', fontStyle:'bold' }
+        },
+        alternateRowStyles: { fillColor: PDF_COL.bgLight },
+        didDrawPage: function() { drawHeader(doc, 'Full Dispatch Log', 'Complete record of all outbound dispatches'); }
+      });
+
+      // Totals row at bottom
+      const lastY = doc.lastAutoTable.finalY + 4;
+      doc.setFillColor(...PDF_COL.blue);
+      doc.rect(14, lastY, pw - 28, 8, 'F');
+      doc.setTextColor(255,255,255);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(10);
+      doc.text(`TOTAL: ${fmtFull(total)} units across ${fmtFull(PDF_DATA.length)} records`, 18, lastY + 5.5);
+
+      drawFooter(doc);
+      doc.save(`Dispatch-Log_${todayStr()}.pdf`);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // ═══ 5. SIZE BREAKDOWN REPORT ════════════════════════════════════════
+    // ═════════════════════════════════════════════════════════════════════
+    function buildSizeBreakdownPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+      const pw = doc.internal.pageSize.getWidth();
+
+      drawHeader(doc, 'Size Breakdown Report', 'Units dispatched by size with customer and SKU spread');
+
+      const total = PDF_DATA.reduce((a,r) => a + r.qty, 0) || 1;
+      const sizeM = groupBy(PDF_DATA, 'sz');
+      const sizeArr = Object.entries(sizeM).sort((a,b) => b[1] - a[1]);
+
+      let y = 47;
+      // Overall size summary
+      y = drawSectionTitle(doc, y, 'Overall Size Distribution', PDF_COL.green);
+      doc.autoTable({
+        startY: y,
+        head: [['Size', 'Units', 'Share %', '# Customers', '# SKUs', '# Bills']],
+        body: sizeArr.map(([sz, qty]) => {
+          const recs = PDF_DATA.filter(r => r.sz === sz);
+          return [
+            sz, fmtFull(qty), ((qty/total)*100).toFixed(2) + '%',
+            new Set(recs.map(r => r.party)).size,
+            new Set(recs.map(r => r.sku)).size,
+            new Set(recs.map(r => r.bill)).size
+          ];
+        }),
+        theme: 'grid',
+        margin: { left: 14, right: 14 },
+        styles: { font:'helvetica', fontSize:9.5, cellPadding:2.4, textColor: PDF_COL.text },
+        headStyles: { fillColor: PDF_COL.green, textColor:[255,255,255], fontStyle:'bold' },
+        columnStyles: {
+          0: { cellWidth: 24, halign:'center', fontStyle:'bold' },
+          1: { halign:'right', fontStyle:'bold' },
+          2: { halign:'right' },
+          3: { halign:'right' },
+          4: { halign:'right' },
+          5: { halign:'right' }
+        },
+        alternateRowStyles: { fillColor: PDF_COL.bgLight }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      // Top customers per size (combined matrix)
+      const top10P = getLeaderboard('party').slice(0, 10).map(r => r.name);
+      const sizeKeys = sizeArr.map(([sz]) => sz);
+
+      y = drawSectionTitle(doc, y, 'Top 10 Customers x Size Matrix', PDF_COL.blue);
+      const matrixBody = top10P.map((pname, idx) => {
+        const row = [idx+1, pname];
+        let pTotal = 0;
+        sizeKeys.forEach(sz => {
+          const q = PDF_DATA.filter(r => r.party === pname && r.sz === sz)
+            .reduce((a,r) => a + r.qty, 0);
+          row.push(q > 0 ? fmtFull(q) : '-');
+          pTotal += q;
+        });
+        row.push(fmtFull(pTotal));
+        return row;
+      });
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'Customer', ...sizeKeys, 'Total']],
+        body: matrixBody,
+        theme: 'grid',
+        margin: { left: 14, right: 14 },
+        styles: { font:'helvetica', fontSize:8.5, cellPadding:1.8, textColor: PDF_COL.text },
+        headStyles: { fillColor: PDF_COL.blue, textColor:[255,255,255], fontStyle:'bold', halign:'center' },
+        columnStyles: Object.assign(
+          { 0:{cellWidth:8,halign:'center'}, 1:{cellWidth:'auto'} },
+          Object.fromEntries(sizeKeys.map((_, i) => [i+2, {halign:'right'}])),
+          { [sizeKeys.length+2]: {halign:'right', fontStyle:'bold', fillColor: PDF_COL.blueLight} }
+        ),
+        alternateRowStyles: { fillColor: PDF_COL.bgLight }
+      });
+
+      drawFooter(doc);
+      doc.save(`Size-Breakdown_${todayStr()}.pdf`);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // ═══ 6. TOP CUSTOMER DETAIL ══════════════════════════════════════════
+    // ═════════════════════════════════════════════════════════════════════
+    function buildTopCustomerDetailPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+      const pw = doc.internal.pageSize.getWidth();
+
+      // Use selected party filter if set, else top customer
+      const selectedParty = v('f-party');
+      const partyLB = getLeaderboard('party');
+      const targetParty = selectedParty || (partyLB[0] && partyLB[0].name);
+      if (!targetParty) {
+        throw new Error('No customer to report on');
+      }
+      const recs = PDF_DATA.filter(r => r.party === targetParty);
+      if (recs.length === 0) throw new Error('No records for ' + targetParty);
+
+      drawHeader(doc, 'Customer Detail Report', `Detailed analysis for: ${trunc(targetParty, 60)}`);
+
+      const totalQty = recs.reduce((a,r) => a + r.qty, 0);
+      const allTotal = PDF_DATA.reduce((a,r) => a + r.qty, 0) || 1;
+      const share = ((totalQty / allTotal) * 100).toFixed(2);
+      const skuCount = new Set(recs.map(r => r.sku)).size;
+      const billCount = new Set(recs.map(r => r.bill)).size;
+      const dayCount = new Set(recs.map(r => r.sk)).size;
+      const rank = partyLB.findIndex(r => r.name === targetParty) + 1;
+
+      // KPI strip
+      let y = 47;
+      const boxW = (pw - 28 - 12) / 4;
+      drawKpiBox(doc, 14,                 y, boxW, 24, 'Total Units',  fmtFull(totalQty),  `${share}% of overall`,           PDF_COL.blue);
+      drawKpiBox(doc, 14+boxW+4,          y, boxW, 24, 'Rank',         '#' + rank,         `Out of ${partyLB.length}`,        PDF_COL.amber);
+      drawKpiBox(doc, 14+(boxW+4)*2,      y, boxW, 24, 'Unique SKUs',  fmtFull(skuCount),  `Across ${billCount} bills`,       PDF_COL.teal);
+      drawKpiBox(doc, 14+(boxW+4)*3,      y, boxW, 24, 'Active Days',  fmtFull(dayCount),  `Last: ${recs[recs.length-1].d}`,  PDF_COL.green);
+      y += 30;
+
+      // SKU breakdown
+      y = drawSectionTitle(doc, y, 'SKU-wise Breakdown', PDF_COL.teal);
+      const skuMap = {};
+      recs.forEach(r => {
+        if (!skuMap[r.sku]) skuMap[r.sku] = { qty:0, bills:new Set(), sz:r.sz, sty:r.sty };
+        skuMap[r.sku].qty += r.qty;
+        skuMap[r.sku].bills.add(r.bill);
+      });
+      const skuRows = Object.entries(skuMap)
+        .sort((a,b) => b[1].qty - a[1].qty)
+        .map(([sku, d], i) => [
+          i+1, sku, d.sz, fmtFull(d.qty),
+          ((d.qty/totalQty)*100).toFixed(2) + '%',
+          d.bills.size
+        ]);
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'SKU', 'Size', 'Units', 'Share', 'Bills']],
+        body: skuRows,
+        theme: 'grid',
+        margin: { left: 14, right: 14 },
+        styles: { font:'helvetica', fontSize:9, cellPadding:2, textColor: PDF_COL.text },
+        headStyles: { fillColor: PDF_COL.teal, textColor:[255,255,255], fontStyle:'bold' },
+        columnStyles: {
+          0:{cellWidth:10,halign:'center'},
+          2:{cellWidth:18,halign:'center'},
+          3:{cellWidth:24,halign:'right',fontStyle:'bold'},
+          4:{cellWidth:20,halign:'right'},
+          5:{cellWidth:16,halign:'right'}
+        },
+        alternateRowStyles: { fillColor: PDF_COL.bgLight },
+        didDrawPage: function() { drawHeader(doc, 'Customer Detail Report', `Detailed analysis for: ${trunc(targetParty, 60)}`); }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      // Bill-wise log
+      if (y > 230) { doc.addPage(); y = 47; }
+      y = drawSectionTitle(doc, y, 'Bill-wise Dispatch Log', PDF_COL.blue);
+      const billRows = recs.slice()
+        .sort((a,b) => a.sk.localeCompare(b.sk))
+        .map((r, i) => [i+1, r.d, r.bill, r.sku, r.sz, fmtFull(r.qty)]);
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'Date', 'Bill', 'SKU', 'Size', 'Qty']],
+        body: billRows,
+        theme: 'striped',
+        margin: { left: 14, right: 14 },
+        styles: { font:'helvetica', fontSize:8.5, cellPadding:1.8, textColor: PDF_COL.text },
+        headStyles: { fillColor: PDF_COL.blue, textColor:[255,255,255], fontStyle:'bold' },
+        columnStyles: {
+          0:{cellWidth:10,halign:'center'},
+          1:{cellWidth:22},
+          2:{cellWidth:28},
+          4:{cellWidth:18,halign:'center'},
+          5:{cellWidth:20,halign:'right',fontStyle:'bold'}
+        },
+        alternateRowStyles: { fillColor: PDF_COL.bgLight },
+        didDrawPage: function() { drawHeader(doc, 'Customer Detail Report', `Detailed analysis for: ${trunc(targetParty, 60)}`); }
+      });
+
+      drawFooter(doc);
+      const safeName = targetParty.replace(/[^a-z0-9]+/gi, '-').slice(0, 30);
+      doc.save(`Customer-Detail_${safeName}_${todayStr()}.pdf`);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // ═══ 7. MONTH-OVER-MONTH COMPARISON ══════════════════════════════════
+    // ═════════════════════════════════════════════════════════════════════
+    function buildMonthlyComparePDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+      const pw = doc.internal.pageSize.getWidth();
+
+      drawHeader(doc, 'Month-over-Month Comparison', 'Monthly dispatch totals and party-wise breakdown');
+
+      // Group by month
+      const monthMap = {};
+      PDF_DATA.forEach(r => {
+        if (!monthMap[r.mo]) monthMap[r.mo] = { qty:0, parties:new Set(), skus:new Set(), bills:new Set(), days:new Set() };
+        monthMap[r.mo].qty += r.qty;
+        monthMap[r.mo].parties.add(r.party);
+        monthMap[r.mo].skus.add(r.sku);
+        monthMap[r.mo].bills.add(r.bill);
+        monthMap[r.mo].days.add(r.sk);
+      });
+      const monthOrder = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const months = monthOrder.filter(m => monthMap[m]);
+
+      let y = 47;
+      y = drawSectionTitle(doc, y, 'Monthly Summary', PDF_COL.blue);
+      const monthRows = months.map((m, i) => {
+        const cur = monthMap[m];
+        const prev = i > 0 ? monthMap[months[i-1]] : null;
+        const growth = prev ? (((cur.qty - prev.qty) / prev.qty) * 100).toFixed(1) + '%' : '-';
+        return [
+          m,
+          fmtFull(cur.qty),
+          cur.parties.size,
+          cur.skus.size,
+          cur.bills.size,
+          cur.days.size,
+          cur.days.size ? fmtFull(Math.round(cur.qty / cur.days.size)) : '-',
+          growth
+        ];
+      });
+      doc.autoTable({
+        startY: y,
+        head: [['Month', 'Units', 'Customers', 'SKUs', 'Bills', 'Days', 'Avg/Day', 'MoM %']],
+        body: monthRows,
+        theme: 'grid',
+        margin: { left: 14, right: 14 },
+        styles: { font:'helvetica', fontSize:9.5, cellPadding:2.4, textColor: PDF_COL.text },
+        headStyles: { fillColor: PDF_COL.blue, textColor:[255,255,255], fontStyle:'bold' },
+        columnStyles: {
+          0: { cellWidth: 22, halign:'center', fontStyle:'bold' },
+          1: { halign:'right', fontStyle:'bold' },
+          2: { halign:'right' },
+          3: { halign:'right' },
+          4: { halign:'right' },
+          5: { halign:'right' },
+          6: { halign:'right' },
+          7: { halign:'right' }
+        },
+        alternateRowStyles: { fillColor: PDF_COL.bgLight },
+        didParseCell: function(d) {
+          if (d.section === 'body' && d.column.index === 7) {
+            const txt = d.cell.raw;
+            if (typeof txt === 'string' && txt.endsWith('%')) {
+              const num = parseFloat(txt);
+              if (num > 0) { d.cell.styles.textColor = PDF_COL.green; d.cell.styles.fontStyle = 'bold'; }
+              else if (num < 0) { d.cell.styles.textColor = PDF_COL.rose; d.cell.styles.fontStyle = 'bold'; }
+            }
+          }
+        }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      // Top customers × months matrix
+      if (y > 230) { doc.addPage(); y = 47; }
+      y = drawSectionTitle(doc, y, 'Top 12 Customers x Month', PDF_COL.teal);
+      const top12P = getLeaderboard('party').slice(0, 12).map(r => r.name);
+      const matrixBody = top12P.map((pname, idx) => {
+        const row = [idx+1, pname];
+        let pTotal = 0;
+        months.forEach(m => {
+          const q = PDF_DATA.filter(r => r.party === pname && r.mo === m).reduce((a,r) => a + r.qty, 0);
+          row.push(q > 0 ? fmtFull(q) : '-');
+          pTotal += q;
+        });
+        row.push(fmtFull(pTotal));
+        return row;
+      });
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'Customer', ...months, 'Total']],
+        body: matrixBody,
+        theme: 'grid',
+        margin: { left: 14, right: 14 },
+        styles: { font:'helvetica', fontSize:8.5, cellPadding:1.8, textColor: PDF_COL.text },
+        headStyles: { fillColor: PDF_COL.teal, textColor:[255,255,255], fontStyle:'bold', halign:'center' },
+        columnStyles: Object.assign(
+          { 0:{cellWidth:8,halign:'center'}, 1:{cellWidth:'auto'} },
+          Object.fromEntries(months.map((_, i) => [i+2, {halign:'right'}])),
+          { [months.length+2]: {halign:'right', fontStyle:'bold', fillColor: PDF_COL.blueLight} }
+        ),
+        alternateRowStyles: { fillColor: PDF_COL.bgLight }
+      });
+
+      drawFooter(doc);
+      doc.save(`Monthly-Comparison_${todayStr()}.pdf`);
+    }
+
+    // ─── Close menu on outside click handled by backdrop ──────────────────
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeExportMenu();
+    });
   </script>
+
+  <!-- PDF generation toast -->
+  <div class="pdf-toast" id="pdf-toast">
+    <span class="pdf-spin" id="pdf-toast-spin"></span>
+    <span id="pdf-toast-icon" style="display:none;font-size:18px"></span>
+    <span id="pdf-toast-msg">Generating PDF…</span>
+  </div>
 </body>
 
 </html>
