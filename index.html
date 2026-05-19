@@ -580,8 +580,8 @@
     /* ─── KPI GRID ────────────────────────────────────────────────── */
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 18px;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
       margin-bottom: 22px
     }
 
@@ -1304,6 +1304,144 @@
       #ch-cricket{ height: 200px !important }
     }
 
+    /* ─── STOCK STATUS SECTION ────────────────────────────────────────── */
+    .stock-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+    .stock-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-top: 4px solid var(--blue);
+      border-radius: var(--r);
+      box-shadow: var(--sh);
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    .stock-card.out { border-top-color: var(--rose); }
+    .stock-card.low { border-top-color: var(--amber); }
+    .stock-card.high { border-top-color: var(--green); }
+
+    .stock-hd {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 6px;
+    }
+    .stock-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .stock-title .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .stock-title .dot.r { background: var(--rose); box-shadow: 0 0 0 3px rgba(225,29,72,.18); }
+    .stock-title .dot.a { background: var(--amber); box-shadow: 0 0 0 3px rgba(217,119,6,.18); }
+    .stock-title .dot.g { background: var(--green); box-shadow: 0 0 0 3px rgba(5,150,105,.18); }
+    .stock-count {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: var(--bg);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .stock-card.out .stock-count { background: #fff1f2; color: #be123c; }
+    .stock-card.low .stock-count { background: #fffbeb; color: #92400e; }
+    .stock-card.high .stock-count { background: #ecfdf5; color: #047857; }
+
+    .stock-sub {
+      font-size: 11.5px;
+      color: var(--muted);
+      font-weight: 500;
+      margin-bottom: 14px;
+      line-height: 1.4;
+    }
+    .stock-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+    }
+    .stock-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--bg);
+      border-radius: 8px;
+      border-left: 3px solid var(--border);
+    }
+    .stock-card.out .stock-item { border-left-color: var(--rose); }
+    .stock-card.low .stock-item { border-left-color: var(--amber); }
+    .stock-card.high .stock-item { border-left-color: var(--green); }
+    .stock-item-name {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+      flex: 1;
+    }
+    .stock-item-sub {
+      font-size: 10.5px;
+      color: var(--muted);
+      font-weight: 500;
+      margin-top: 1px;
+    }
+    .stock-item-val {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text);
+      margin-left: 10px;
+      white-space: nowrap;
+    }
+    .stock-card.out .stock-item-val { color: #be123c; }
+    .stock-card.low .stock-item-val { color: #b45309; }
+    .stock-card.high .stock-item-val { color: #047857; }
+    .stock-empty {
+      font-size: 12px;
+      color: var(--faint);
+      text-align: center;
+      padding: 18px 8px;
+      font-style: italic;
+    }
+
+    /* Stock pill - used inline next to SKU rows in the leaderboard */
+    .stk-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      letter-spacing: .01em;
+      flex-shrink: 0;
+    }
+    .stk-pill.out { background: #fef2f2; color: #be123c; border: 1px solid #fecaca; }
+    .stk-pill.low { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+    .stk-pill.healthy { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+    .stk-pill.high { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+    .stk-pill.unknown { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+
+    @media(max-width:1100px) {
+      .stock-row { grid-template-columns: 1fr; }
+    }
+
     /* ─── PDF EXPORT MENU ─────────────────────────────────────────────── */
     .export-wrap {
       position: relative;
@@ -1676,6 +1814,16 @@
                 <div class="em-desc">All months · totals & growth · party-wise</div>
               </span>
             </button>
+
+            <div class="em-divider"></div>
+            <div class="em-hd">Inventory</div>
+            <button class="em-item" onclick="exportPDF('stock-report')">
+              <span class="em-icon">📦</span>
+              <span class="em-body">
+                <div class="em-title">Stock Report</div>
+                <div class="em-desc">Out-of-stock + low + healthy + high · current warehouse inventory</div>
+              </span>
+            </button>
           </div>
         </div>
         <div class="em-backdrop" id="em-backdrop" onclick="closeExportMenu()"></div>
@@ -1755,6 +1903,18 @@
             <div class="kpi-lbl">Total Bills</div>
             <div class="kpi-val" id="kv-3">—</div>
             <div class="kpi-sub" id="ks-3">—</div>
+          </div>
+        </div>
+        <div class="kpi ro fu" id="kpi-stock">
+          <div class="kpi-ico"><svg viewBox="0 0 24 24">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+              <line x1="12" y1="22.08" x2="12" y2="12" />
+            </svg></div>
+          <div class="kpi-body">
+            <div class="kpi-lbl">Stock Alerts</div>
+            <div class="kpi-val" id="kv-4">—</div>
+            <div class="kpi-sub" id="ks-4">—</div>
           </div>
         </div>
       </div>
@@ -1872,6 +2032,60 @@
         <div id="cricket-stats" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;margin-top:16px"></div>
       </div>
 
+      <!-- ROW 5: Stock Status — three inventory cards -->
+      <div class="cc-hd-row" style="margin-bottom:14px;align-items:center">
+        <div>
+          <div style="font-size:17px;font-weight:800;color:var(--text);display:flex;align-items:center;gap:10px">
+            <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:var(--blue);stroke-width:2.2;fill:none">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+            Inventory Status
+          </div>
+          <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:2px">
+            Current stock levels at warehouse — drives manufacturing &amp; reorder decisions
+          </div>
+        </div>
+        <button class="btn-pdf-mini" onclick="exportPDF('stock-report')" title="Download full Stock Report as PDF">
+          <svg viewBox="0 0 24 24">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span class="lbl-txt">Stock PDF</span>
+        </button>
+      </div>
+      <div class="stock-row">
+        <!-- OUT OF STOCK -->
+        <div class="stock-card out fu">
+          <div class="stock-hd">
+            <div class="stock-title"><span class="dot r"></span> Out of Stock</div>
+            <span class="stock-count" id="stk-out-count">— SKUs</span>
+          </div>
+          <div class="stock-sub">Recently dispatched but stock = 0. Manufacture urgently.</div>
+          <div class="stock-list" id="stk-out-list"></div>
+        </div>
+        <!-- LOW STOCK -->
+        <div class="stock-card low fu">
+          <div class="stock-hd">
+            <div class="stock-title"><span class="dot a"></span> Low Stock — Reorder Soon</div>
+            <span class="stock-count" id="stk-low-count">— SKUs</span>
+          </div>
+          <div class="stock-sub">Below 50 units. Plan next production cycle.</div>
+          <div class="stock-list" id="stk-low-list"></div>
+        </div>
+        <!-- HIGH STOCK -->
+        <div class="stock-card high fu">
+          <div class="stock-hd">
+            <div class="stock-title"><span class="dot g"></span> Top Inventory On Hand</div>
+            <span class="stock-count" id="stk-high-count">— SKUs</span>
+          </div>
+          <div class="stock-sub">Well-stocked SKUs. Push these in dispatches.</div>
+          <div class="stock-list" id="stk-high-list"></div>
+        </div>
+      </div>
+
       <!-- TABLE -->
       <div class="tbl-wrap fu" id="cc-tbl">
         <div class="tbl-top">
@@ -1903,6 +2117,7 @@
                 <th>Bill</th>
                 <th>Month</th>
                 <th>Qty</th>
+                <th>Stock</th>
               </tr>
             </thead>
             <tbody id="tbl-body"></tbody>
@@ -1937,8 +2152,18 @@
       const qty = parseInt(r['Quantity'] || r['qty'] || 0);
       const io = (r['In/Out'] || '').toLowerCase();
       if (io && io !== 'out') return null; // only count outbound
+
+      // Parse stock — empty string / null / NaN means "no info"; 0 is valid (out of stock)
+      let stock = null;
+      const rawStock = r['Stock'];
+      if (rawStock !== '' && rawStock !== null && rawStock !== undefined) {
+        const n = Number(rawStock);
+        if (!isNaN(n)) stock = n;
+      }
+
       return {
-        d: disp, sk, mo: mo_name, sku, sty, sz, qty,
+        d: disp, sk, mo: mo_name, sku, sty, sz, qty, stock,
+        ts: dt.getTime(),               // for sorting to find latest stock per SKU
         bill: r['Bill no/name'] || r['Billnoname'] || r['bill'] || '',
         party: r['Party Name'] || r['PartyName'] || r['party'] || ''
       };
@@ -1959,6 +2184,7 @@
       try {
         const norm = await fetchData();
         DATA = norm;
+        buildStockMap();
         ['f-sz', 'f-party'].forEach(id => {
           const s = el(id);
           while (s.options.length > 1) s.remove(1);
@@ -1991,6 +2217,7 @@
       try {
         const norm = await fetchData();
         DATA = norm;
+        buildStockMap();
         launch();
         const now = new Date();
         const ts = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
@@ -2005,6 +2232,40 @@
 
     // ═══ STATE ════════════════════════════════════════════════════════
     let DATA = [];
+    // STOCK_MAP: SKU -> { stock: number, sz: string, sty: string, lastSeen: 'DD MMM' }
+    // Built from DATA on every refresh. Stock is the latest non-null reading per SKU.
+    let STOCK_MAP = {};
+
+    function buildStockMap() {
+      STOCK_MAP = {};
+      // Sort by timestamp ascending so latest stock value overrides earlier ones.
+      // Skip rows with null stock — only valid readings update the map.
+      const sorted = DATA.slice().sort((a, b) => a.ts - b.ts);
+      for (const r of sorted) {
+        if (r.stock !== null && r.stock !== undefined) {
+          STOCK_MAP[r.sku] = {
+            stock: r.stock,
+            sz: r.sz,
+            sty: r.sty,
+            lastSeen: r.d
+          };
+        }
+      }
+    }
+
+    // Classify stock level for color coding
+    // 0          -> 'out'      (red, urgent)
+    // 1-49       -> 'low'      (amber, reorder soon)
+    // 50-199     -> 'healthy'  (green, fine)
+    // 200+       -> 'high'     (blue, well-stocked)
+    // null/undef -> 'unknown'  (gray, no data)
+    function stockTier(n) {
+      if (n === null || n === undefined || isNaN(n)) return 'unknown';
+      if (n === 0) return 'out';
+      if (n < 50) return 'low';
+      if (n < 200) return 'healthy';
+      return 'high';
+    }
 
     // ═══ FILTER ═══════════════════════════════════════════════════════
     let FILTERED = [...DATA];
@@ -2141,6 +2402,7 @@
       renderLeaderboard('sku', 'lb-sku', 'slb-total');
       renderPartyBar(); renderMonths();
       renderCricket();
+      renderStockStatus();
       renderTbl();
     }
 
@@ -2155,6 +2417,88 @@
       set('kv-1', parties); set('ks-1', `unique customer parties`);
       set('kv-2', skus); set('ks-2', `distinct SKUs in this view`);
       set('kv-3', bills); set('ks-3', `unique bill numbers`);
+
+      // Stock alerts KPI — count out-of-stock + low across ALL known stock
+      let out = 0, low = 0, healthy = 0, high = 0;
+      Object.values(STOCK_MAP).forEach(s => {
+        const t = stockTier(s.stock);
+        if (t === 'out') out++;
+        else if (t === 'low') low++;
+        else if (t === 'healthy') healthy++;
+        else if (t === 'high') high++;
+      });
+      const critical = out + low;
+      set('kv-4', critical);
+      const subParts = [];
+      if (out > 0) subParts.push(`${out} out`);
+      if (low > 0) subParts.push(`${low} low`);
+      if (subParts.length === 0) {
+        set('ks-4', `all ${healthy + high} SKUs healthy`);
+      } else {
+        set('ks-4', subParts.join(' · ') + ' — action needed');
+      }
+      // Color the stock KPI based on severity
+      const kpiCard = document.getElementById('kpi-stock');
+      if (kpiCard) {
+        kpiCard.classList.remove('ro', 'am', 'gr');
+        if (out > 0) kpiCard.classList.add('ro');
+        else if (low > 0) kpiCard.classList.add('am');
+        else kpiCard.classList.add('gr');
+      }
+    }
+
+    // ─── STOCK STATUS SECTION ──────────────────────────────────────────
+    function renderStockStatus() {
+      // Build list of all SKUs with stock info, with their tier
+      const skuTotals = groupBy(FILTERED, 'sku'); // for showing "dispatched in this view"
+      const list = Object.entries(STOCK_MAP).map(([sku, info]) => ({
+        sku, stock: info.stock, sz: info.sz, sty: info.sty,
+        lastSeen: info.lastSeen,
+        dispQty: skuTotals[sku] || 0,
+        tier: stockTier(info.stock)
+      }));
+
+      const out = list.filter(x => x.tier === 'out')
+        // Prioritize ones recently dispatched (more urgent to manufacture)
+        .sort((a, b) => b.dispQty - a.dispQty);
+      const low = list.filter(x => x.tier === 'low')
+        .sort((a, b) => a.stock - b.stock);
+      const high = list.filter(x => x.tier === 'high' || x.tier === 'healthy')
+        .sort((a, b) => b.stock - a.stock);
+
+      set('stk-out-count', `${out.length} SKU${out.length === 1 ? '' : 's'}`);
+      set('stk-low-count', `${low.length} SKU${low.length === 1 ? '' : 's'}`);
+      set('stk-high-count', `${high.length} SKU${high.length === 1 ? '' : 's'}`);
+
+      renderStockList('stk-out-list', out.slice(0, 6), 'out');
+      renderStockList('stk-low-list', low.slice(0, 6), 'low');
+      renderStockList('stk-high-list', high.slice(0, 6), 'high');
+    }
+
+    function renderStockList(targetId, items, mode) {
+      const cont = document.getElementById(targetId);
+      if (!cont) return;
+      if (items.length === 0) {
+        const msg = mode === 'out' ? 'No SKUs out of stock — great!'
+                  : mode === 'low' ? 'No low stock — all healthy'
+                  : 'No stock data available';
+        cont.innerHTML = `<div class="stock-empty">${msg}</div>`;
+        return;
+      }
+      cont.innerHTML = items.map(x => {
+        const subParts = [];
+        if (x.dispQty > 0) subParts.push(`Recent dispatch: ${fmtN(x.dispQty)}`);
+        else subParts.push(`Last seen: ${x.lastSeen}`);
+        return `
+          <div class="stock-item">
+            <div style="min-width:0;flex:1">
+              <div class="stock-item-name">${x.sku}</div>
+              <div class="stock-item-sub">${subParts.join(' · ')}</div>
+            </div>
+            <div class="stock-item-val">${fmtN(x.stock)}</div>
+          </div>
+        `;
+      }).join('');
     }
 
     // ─── CHAMPIONS ─────────────────────────────────────────────────────
@@ -2246,9 +2590,24 @@
         const rankCls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
         const medal = i < 3 ? MEDALS[i] : `${i + 1}`;
         const barColor = i === 0 ? '#2563eb' : i === 1 ? '#0891b2' : i === 2 ? '#059669' : lerp(i / Math.max(sorted.length - 1, 1));
+
+        // For SKU rows, show inline stock pill
+        let stockPill = '';
+        if (key === 'sku' && STOCK_MAP[name]) {
+          const s = STOCK_MAP[name].stock;
+          const tier = stockTier(s);
+          const label = tier === 'out' ? '0 stock' : `${fmtN(s)} stock`;
+          const title = tier === 'out' ? 'OUT OF STOCK - manufacture urgently'
+                      : tier === 'low' ? 'Low stock - reorder soon'
+                      : tier === 'healthy' ? 'Healthy stock level'
+                      : 'Well-stocked';
+          stockPill = `<span class="stk-pill ${tier}" title="${title}">${label}</span>`;
+        }
+
         return `<div class="lb-row">
       <span class="lb-rank ${rankCls}">${medal}</span>
-      <span class="lb-name" title="${name}">${trunc(name, 28)}</span>
+      <span class="lb-name" title="${name}">${trunc(name, 24)}</span>
+      ${stockPill}
       <div class="lb-bar-wrap"><div class="lb-bar" style="width:${pct}%;background:${barColor}"></div></div>
       <span class="lb-qty">${fmtN(qty)}</span>
       <span class="lb-pct">${share}%</span>
@@ -2529,6 +2888,13 @@
         const pRank = topP.indexOf(r.party), sRank = topS.indexOf(r.sku);
         const pM = pRank < 3 ? ['🥇', '🥈', '🥉'][pRank] : '';
         const sM = sRank < 3 ? ['🥇', '🥈', '🥉'][sRank] : '';
+        // Use latest SKU stock (from STOCK_MAP) rather than row's possibly-stale stock
+        const stk = STOCK_MAP[r.sku];
+        let stockCell = '<span style="color:var(--faint);font-size:11px">—</span>';
+        if (stk) {
+          const tier = stockTier(stk.stock);
+          stockCell = `<span class="stk-pill ${tier}">${fmtN(stk.stock)}</span>`;
+        }
         return `<tr>
       <td style="color:var(--faint)">${i + 1}</td>
       <td style="font-weight:600">${r.d}</td>
@@ -2539,6 +2905,7 @@
       <td style="color:var(--muted)">${r.bill}</td>
       <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:${r.mo === 'Apr' ? 'var(--bt)' : 'var(--tt)'};color:${r.mo === 'Apr' ? 'var(--blue)' : 'var(--teal)'}">${r.mo}</span></td>
       <td class="num">${r.qty.toLocaleString()}</td>
+      <td>${stockCell}</td>
     </tr>`;
       }).join('');
     }
@@ -2552,6 +2919,7 @@
         el('cc-plb'), el('cc-slb'),
         el('cc-pbar'), el('cc-months'),
         el('cc-cricket'),
+        ...document.querySelectorAll('.stock-card'),
         el('cc-tbl'),
       ];
       els.forEach((e, i) => {
@@ -2869,6 +3237,7 @@
           case 'size-breakdown':      buildSizeBreakdownPDF(); break;
           case 'top-customer-detail': buildTopCustomerDetailPDF(); break;
           case 'monthly-compare':     buildMonthlyComparePDF(); break;
+          case 'stock-report':        buildStockReportPDF(); break;
           default: showToast('Unknown report', 'error'); return;
         }
         showToast(`PDF downloaded · ${exportSnapshot.length.toLocaleString()} records included`, 'success');
@@ -2967,7 +3336,7 @@
         head: [['#', 'Top 5 Customers', 'Units', 'Share']],
         body: top5P.map(r => [r.rank, r.name, fmtFull(r.qty), r.share + '%']),
         theme: 'grid',
-        margin: { left: 14, right: pw/2 + 2 },
+        margin: { top: 44, bottom: 18, left: 14, right: pw/2 + 2 },
         tableWidth: (pw - 32) / 2,
         styles: { font:'helvetica', fontSize:9, cellPadding:2.2, textColor: PDF_COL.text },
         headStyles: { fillColor: PDF_COL.blue, textColor: [255,255,255], fontStyle:'bold', fontSize:9 },
@@ -2979,7 +3348,7 @@
         head: [['#', 'Top 5 SKUs', 'Units', 'Share']],
         body: top5S.map(r => [r.rank, r.name, fmtFull(r.qty), r.share + '%']),
         theme: 'grid',
-        margin: { left: pw/2 + 2, right: 14 },
+        margin: { top: 44, bottom: 18, left: pw/2 + 2, right: 14 },
         tableWidth: (pw - 32) / 2,
         styles: { font:'helvetica', fontSize:9, cellPadding:2.2, textColor: PDF_COL.text },
         headStyles: { fillColor: PDF_COL.teal, textColor: [255,255,255], fontStyle:'bold', fontSize:9 },
@@ -3055,15 +3424,43 @@
       // ─── Leaderboard table ───
       const rows = data.map(r => {
         const rankLabel = r.rank === 1 ? '1st' : r.rank === 2 ? '2nd' : r.rank === 3 ? '3rd' : String(r.rank);
-        return [rankLabel, r.name, fmtFull(r.qty), r.share + '%'];
+        if (isParty) {
+          return [rankLabel, r.name, fmtFull(r.qty), r.share + '%'];
+        }
+        // SKU rows include current stock + tier label
+        const stk = STOCK_MAP[r.name];
+        let stockCell = '-';
+        if (stk) {
+          const tier = stockTier(stk.stock);
+          const tag = tier === 'out' ? 'OUT' : tier === 'low' ? 'LOW' : tier === 'healthy' ? 'OK' : tier === 'high' ? 'HIGH' : '';
+          stockCell = stk.stock === 0 ? '0 (OUT)' : `${fmtFull(stk.stock)} (${tag})`;
+        }
+        return [rankLabel, r.name, fmtFull(r.qty), r.share + '%', stockCell];
       });
+
+      const head = isParty
+        ? [['Rank', 'Customer Name', 'Quantity', 'Share %']]
+        : [['Rank', 'SKU', 'Dispatched', 'Share %', 'Stock On Hand']];
+
+      const columnStyles = isParty ? {
+        0: { cellWidth: 22, halign: 'left', fontStyle: 'bold', cellPadding: { left:5, top:3.2, bottom:3.2 } },
+        1: { cellWidth: 'auto', cellPadding: { left:2, top:3.2, bottom:3.2 } },
+        2: { cellWidth: 32, halign: 'right', fontStyle: 'bold', cellPadding: { right:5, top:3.2, bottom:3.2 } },
+        3: { cellWidth: 26, halign: 'right', textColor: PDF_COL.muted, cellPadding: { right:5, top:3.2, bottom:3.2 } }
+      } : {
+        0: { cellWidth: 18, halign: 'left', fontStyle: 'bold', cellPadding: { left:5, top:3.2, bottom:3.2 } },
+        1: { cellWidth: 'auto', cellPadding: { left:2, top:3.2, bottom:3.2 } },
+        2: { cellWidth: 28, halign: 'right', fontStyle: 'bold', cellPadding: { right:3, top:3.2, bottom:3.2 } },
+        3: { cellWidth: 22, halign: 'right', textColor: PDF_COL.muted, cellPadding: { right:3, top:3.2, bottom:3.2 } },
+        4: { cellWidth: 32, halign: 'right', fontStyle: 'bold', cellPadding: { right:5, top:3.2, bottom:3.2 } }
+      };
 
       doc.autoTable({
         startY: y,
-        head: [['Rank', isParty ? 'Customer Name' : 'SKU', 'Quantity', 'Share %']],
+        head: head,
         body: rows,
         theme: 'plain',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: {
           font: 'helvetica', fontSize: 10, cellPadding: 3.2,
           textColor: PDF_COL.text, lineColor: PDF_COL.border, lineWidth: 0.15,
@@ -3073,12 +3470,7 @@
           fillColor: accentColor, textColor: [255,255,255], fontStyle: 'bold',
           halign: 'left', fontSize: 9.5, cellPadding: { top:3.5, bottom:3.5, left:5, right:5 }
         },
-        columnStyles: {
-          0: { cellWidth: 22, halign: 'left', fontStyle: 'bold', cellPadding: { left:5, top:3.2, bottom:3.2 } },
-          1: { cellWidth: 'auto', cellPadding: { left:2, top:3.2, bottom:3.2 } },
-          2: { cellWidth: 32, halign: 'right', fontStyle: 'bold', cellPadding: { right:5, top:3.2, bottom:3.2 } },
-          3: { cellWidth: 26, halign: 'right', textColor: PDF_COL.muted, cellPadding: { right:5, top:3.2, bottom:3.2 } }
-        },
+        columnStyles: columnStyles,
         alternateRowStyles: { fillColor: [250, 251, 253] },
         didParseCell: function(d) {
           // Highlight top 3 with subtle medal-tier backgrounds
@@ -3097,6 +3489,19 @@
             if (d.column.index === 0) {
               d.cell.styles.textColor = accents[d.row.index];
               d.cell.styles.fontSize = 10.5;
+            }
+          }
+          // Color the Stock cell by tier (SKU leaderboard only)
+          if (!isParty && d.section === 'body' && d.column.index === 4) {
+            const txt = String(d.cell.raw || '');
+            if (txt.includes('OUT')) {
+              d.cell.styles.textColor = [190, 18, 60];
+            } else if (txt.includes('LOW')) {
+              d.cell.styles.textColor = [180, 83, 9];
+            } else if (txt.includes('HIGH')) {
+              d.cell.styles.textColor = [29, 78, 216];
+            } else if (txt.includes('OK')) {
+              d.cell.styles.textColor = [4, 120, 87];
             }
           }
         },
@@ -3149,7 +3554,7 @@
         head: [['#', 'Customer', 'Units', 'Share %']],
         body: partyLB.map(r => [r.rank, r.name, fmtFull(r.qty), r.share + '%']),
         theme: 'grid',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: { font:'helvetica', fontSize:9, cellPadding:2, textColor: PDF_COL.text },
         headStyles: { fillColor: PDF_COL.blue, textColor:[255,255,255], fontStyle:'bold' },
         columnStyles: { 0:{cellWidth:10,halign:'center'}, 2:{cellWidth:30,halign:'right',fontStyle:'bold'}, 3:{cellWidth:22,halign:'right'} },
@@ -3167,7 +3572,7 @@
         head: [['#', 'SKU', 'Units', 'Share %']],
         body: skuLB.map(r => [r.rank, r.name, fmtFull(r.qty), r.share + '%']),
         theme: 'grid',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: { font:'helvetica', fontSize:9, cellPadding:2, textColor: PDF_COL.text },
         headStyles: { fillColor: PDF_COL.teal, textColor:[255,255,255], fontStyle:'bold' },
         columnStyles: { 0:{cellWidth:10,halign:'center'}, 2:{cellWidth:30,halign:'right',fontStyle:'bold'}, 3:{cellWidth:22,halign:'right'} },
@@ -3191,7 +3596,7 @@
           return [sz, fmtFull(qty), ((qty/total)*100).toFixed(2) + '%', sP, sS];
         }),
         theme: 'grid',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: { font:'helvetica', fontSize:9, cellPadding:2.2, textColor: PDF_COL.text },
         headStyles: { fillColor: PDF_COL.green, textColor:[255,255,255], fontStyle:'bold' },
         columnStyles: { 1:{halign:'right',fontStyle:'bold'}, 2:{halign:'right'}, 3:{halign:'right'}, 4:{halign:'right'} },
@@ -3212,7 +3617,7 @@
         head: [['#', 'Date', 'Party', 'SKU', 'Size', 'Bill', 'Qty']],
         body: logRows,
         theme: 'striped',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: { font:'helvetica', fontSize:8, cellPadding:1.6, textColor: PDF_COL.text, overflow:'linebreak' },
         headStyles: { fillColor: PDF_COL.amber, textColor:[255,255,255], fontStyle:'bold' },
         columnStyles: {
@@ -3274,7 +3679,7 @@
         head: [['#', 'Date', 'Party Name', 'SKU', 'Style', 'Size', 'Bill', 'Month', 'Qty']],
         body: rows,
         theme: 'striped',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: { font:'helvetica', fontSize:8.5, cellPadding:1.8, textColor: PDF_COL.text, overflow:'linebreak' },
         headStyles: { fillColor: PDF_COL.blue, textColor:[255,255,255], fontStyle:'bold' },
         columnStyles: {
@@ -3335,7 +3740,7 @@
           ];
         }),
         theme: 'grid',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: { font:'helvetica', fontSize:9.5, cellPadding:2.4, textColor: PDF_COL.text },
         headStyles: { fillColor: PDF_COL.green, textColor:[255,255,255], fontStyle:'bold' },
         columnStyles: {
@@ -3372,7 +3777,7 @@
         head: [['#', 'Customer', ...sizeKeys, 'Total']],
         body: matrixBody,
         theme: 'grid',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: { font:'helvetica', fontSize:8.5, cellPadding:1.8, textColor: PDF_COL.text },
         headStyles: { fillColor: PDF_COL.blue, textColor:[255,255,255], fontStyle:'bold', halign:'center' },
         columnStyles: Object.assign(
@@ -3444,7 +3849,7 @@
         head: [['#', 'SKU', 'Size', 'Units', 'Share', 'Bills']],
         body: skuRows,
         theme: 'grid',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: { font:'helvetica', fontSize:9, cellPadding:2, textColor: PDF_COL.text },
         headStyles: { fillColor: PDF_COL.teal, textColor:[255,255,255], fontStyle:'bold' },
         columnStyles: {
@@ -3470,7 +3875,7 @@
         head: [['#', 'Date', 'Bill', 'SKU', 'Size', 'Qty']],
         body: billRows,
         theme: 'striped',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: { font:'helvetica', fontSize:8.5, cellPadding:1.8, textColor: PDF_COL.text },
         headStyles: { fillColor: PDF_COL.blue, textColor:[255,255,255], fontStyle:'bold' },
         columnStyles: {
@@ -3534,7 +3939,7 @@
         head: [['Month', 'Units', 'Customers', 'SKUs', 'Bills', 'Days', 'Avg/Day', 'MoM %']],
         body: monthRows,
         theme: 'grid',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: { font:'helvetica', fontSize:9.5, cellPadding:2.4, textColor: PDF_COL.text },
         headStyles: { fillColor: PDF_COL.blue, textColor:[255,255,255], fontStyle:'bold' },
         columnStyles: {
@@ -3581,7 +3986,7 @@
         head: [['#', 'Customer', ...months, 'Total']],
         body: matrixBody,
         theme: 'grid',
-        margin: { left: 14, right: 14 },
+        margin: { top: 44, bottom: 18, left: 14, right: 14 },
         styles: { font:'helvetica', fontSize:8.5, cellPadding:1.8, textColor: PDF_COL.text },
         headStyles: { fillColor: PDF_COL.teal, textColor:[255,255,255], fontStyle:'bold', halign:'center' },
         columnStyles: Object.assign(
@@ -3594,6 +3999,127 @@
 
       drawFooter(doc);
       doc.save(`Monthly-Comparison_${todayStr()}.pdf`);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // ═══ 8. STOCK REPORT ═════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════════════════════
+    function buildStockReportPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+      const pw = doc.internal.pageSize.getWidth();
+
+      drawHeader(doc, 'Stock Report', 'Current warehouse inventory by SKU - reorder priorities');
+
+      // Build classified lists
+      const skuDispatchTotals = groupBy(PDF_DATA, 'sku');
+      const all = Object.entries(STOCK_MAP).map(([sku, info]) => ({
+        sku, stock: info.stock, sz: info.sz, sty: info.sty,
+        lastSeen: info.lastSeen,
+        dispQty: skuDispatchTotals[sku] || 0,
+        tier: stockTier(info.stock)
+      }));
+      const out = all.filter(x => x.tier === 'out').sort((a,b) => b.dispQty - a.dispQty);
+      const low = all.filter(x => x.tier === 'low').sort((a,b) => a.stock - b.stock);
+      const healthy = all.filter(x => x.tier === 'healthy').sort((a,b) => b.stock - a.stock);
+      const high = all.filter(x => x.tier === 'high').sort((a,b) => b.stock - a.stock);
+      const totalUnits = all.reduce((a,r) => a + r.stock, 0);
+
+      // ─── Summary KPI strip ───
+      let y = 47;
+      const boxW = (pw - 28) / 4;
+      const stripH = 22;
+      const summary = [
+        { label: 'OUT OF STOCK', value: out.length, sub: 'manufacture urgently', color: PDF_COL.rose },
+        { label: 'LOW STOCK', value: low.length, sub: 'reorder soon (1-49)', color: PDF_COL.amber },
+        { label: 'HEALTHY + HIGH', value: healthy.length + high.length, sub: 'well-stocked (50+)', color: PDF_COL.green },
+        { label: 'TOTAL ON HAND', value: fmtFull(totalUnits), sub: `across ${all.length} SKUs`, color: PDF_COL.blue }
+      ];
+      summary.forEach((m, i) => {
+        const x = 14 + i * boxW;
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(...PDF_COL.border);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(x, y, boxW - 2, stripH, 2, 2, 'FD');
+        doc.setFillColor(...m.color);
+        doc.rect(x, y, 1.2, stripH, 'F');
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(7);
+        doc.setTextColor(...PDF_COL.muted);
+        doc.text(m.label, x + 5, y + 6);
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(14);
+        doc.setTextColor(...m.color);
+        doc.text(String(m.value), x + 5, y + 14);
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(7);
+        doc.setTextColor(...PDF_COL.muted);
+        doc.text(m.sub || '', x + 5, y + 19);
+      });
+      y += stripH + 6;
+
+      // Helper to draw a stock section table
+      function drawStockSection(sectionTitle, sectionColor, items, includeUrgency) {
+        if (items.length === 0) return;
+        const ph = doc.internal.pageSize.getHeight();
+        if (y > ph - 60) { doc.addPage(); y = 47; }
+        y = drawSectionTitle(doc, y, sectionTitle + ` (${items.length})`, sectionColor);
+
+        const head = includeUrgency
+          ? [['#', 'SKU', 'Size', 'Style', 'Stock', 'Recent Dispatch', 'Last Seen']]
+          : [['#', 'SKU', 'Size', 'Style', 'Stock', 'Last Seen']];
+
+        const body = items.map((x, i) => {
+          const row = [i + 1, x.sku, x.sz, trunc(x.sty || '-', 18), fmtFull(x.stock)];
+          if (includeUrgency) row.push(x.dispQty > 0 ? fmtFull(x.dispQty) + ' units' : '-');
+          row.push(x.lastSeen);
+          return row;
+        });
+
+        doc.autoTable({
+          startY: y,
+          head: head,
+          body: body,
+          theme: 'plain',
+          margin: { top: 44, bottom: 18, left: 14, right: 14 },
+          styles: {
+            font: 'helvetica', fontSize: 9, cellPadding: 2.6,
+            textColor: PDF_COL.text, lineColor: PDF_COL.border, lineWidth: 0.15,
+            valign: 'middle'
+          },
+          headStyles: {
+            fillColor: sectionColor, textColor: [255,255,255], fontStyle: 'bold',
+            halign: 'left', fontSize: 9, cellPadding: { top:3.2, bottom:3.2, left:4, right:4 }
+          },
+          columnStyles: includeUrgency ? {
+            0: { cellWidth: 10, halign: 'center', fontStyle: 'bold', cellPadding: { left:4, top:2.6, bottom:2.6 } },
+            1: { cellWidth: 38, fontStyle: 'bold' },
+            2: { cellWidth: 16, halign: 'center' },
+            3: { cellWidth: 'auto' },
+            4: { cellWidth: 22, halign: 'right', fontStyle: 'bold' },
+            5: { cellWidth: 30, halign: 'right' },
+            6: { cellWidth: 24, halign: 'right', textColor: PDF_COL.muted }
+          } : {
+            0: { cellWidth: 10, halign: 'center', fontStyle: 'bold', cellPadding: { left:4, top:2.6, bottom:2.6 } },
+            1: { cellWidth: 38, fontStyle: 'bold' },
+            2: { cellWidth: 16, halign: 'center' },
+            3: { cellWidth: 'auto' },
+            4: { cellWidth: 24, halign: 'right', fontStyle: 'bold' },
+            5: { cellWidth: 24, halign: 'right', textColor: PDF_COL.muted }
+          },
+          alternateRowStyles: { fillColor: [250, 251, 253] },
+          didDrawPage: function() { drawHeader(doc, 'Stock Report', 'Current warehouse inventory by SKU - reorder priorities'); }
+        });
+        y = doc.lastAutoTable.finalY + 8;
+      }
+
+      drawStockSection('OUT OF STOCK - Urgent Manufacture',  PDF_COL.rose,  out, true);
+      drawStockSection('LOW STOCK - Reorder Soon',           PDF_COL.amber, low, true);
+      drawStockSection('HEALTHY STOCK (50-199 units)',       PDF_COL.green, healthy, false);
+      drawStockSection('HIGH INVENTORY (200+ units)',        PDF_COL.blue,  high, false);
+
+      drawFooter(doc);
+      doc.save(`Stock-Report_${todayStr()}.pdf`);
     }
 
     // ─── Close menu on outside click handled by backdrop ──────────────────
