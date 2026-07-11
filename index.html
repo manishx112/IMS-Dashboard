@@ -1787,10 +1787,9 @@
       <!-- TOPBAR -->
       <div class="topbar">
         <div class="rec-pill"><span class="rec-dot"></span><span id="rec-txt">0 records</span></div>
+        <!-- Month options are populated dynamically from the data (year-aware) -->
         <select class="filter-sel" id="f-mo" onchange="applyFilter()">
           <option value="">All Months</option>
-          <option value="Apr">April</option>
-          <option value="May">May</option>
         </select>
         <select class="filter-sel" id="f-sz" onchange="applyFilter()">
           <option value="">All Sizes</option>
@@ -2283,7 +2282,9 @@
     // ═══ LOCAL CACHE ══════════════════════════════════════════════════
     // Persist the last successful dataset so the dashboard renders instantly
     // on the next load (no spinner) while fresh data is fetched in parallel.
-    const CACHE_KEY = 'ims_dashboard_cache_v1';
+    // v2: rows now carry mk/moLabel and IST-correct dates — old v1 cache is
+    // incompatible (missing fields, dates shifted a day) and must be ignored.
+    const CACHE_KEY = 'ims_dashboard_cache_v2';
 
     function saveCache() {
       try {
@@ -2296,27 +2297,53 @@
         const raw = localStorage.getItem(CACHE_KEY);
         if (!raw) return null;
         const obj = JSON.parse(raw);
-        return (obj && Array.isArray(obj.data) && obj.data.length) ? obj : null;
+        if (!(obj && Array.isArray(obj.data) && obj.data.length)) return null;
+        // Sanity-check row shape — discard cache written by an older version
+        const r0 = obj.data[0];
+        if (!r0 || typeof r0.mk !== 'string' || typeof r0.sk !== 'string') return null;
+        return obj;
       } catch (e) { return null; }
     }
 
     // ═══ NORMALISE API ROW (ISO timestamp format) ═════════════════════
     const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    // All dispatch dates are IST calendar dates. The API serialises a sheet
+    // date of e.g. 04 Apr as "2026-04-03T18:30:00.000Z" (midnight IST in UTC),
+    // so reading UTC fields directly puts every record one day early — and
+    // 1st-of-month rows into the WRONG MONTH. Shift the epoch by +05:30 and
+    // read UTC fields to recover the IST calendar date on any browser.
+    const IST_OFFSET_MS = 330 * 60 * 1000;
+    function parseRowDate(raw) {
+      let dt = new Date(raw);
+      if (isNaN(dt)) {
+        // Fallback: dd/mm/yyyy or dd-mm-yyyy (Indian data entry)
+        const m = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/.exec(String(raw).trim());
+        if (!m) return null;
+        const yr = +m[3] < 100 ? 2000 + +m[3] : +m[3];
+        dt = new Date(Date.UTC(yr, +m[2] - 1, +m[1]));
+        if (isNaN(dt)) return null;
+      }
+      return dt;
+    }
     function normaliseApiRow(r) {
       const sku = r['SKU'] || r['sku'] || '';
       const ms = /(\d+[Xx]\d+)/.exec(sku);
       const sz = ms ? ms[1].toUpperCase() : 'OTHER';
       const sty = sku.replace(/\s*\d+[Xx]\d+/, '').trim();
       const raw = r['Timestamp'] || r['Date'] || ''; // FIX: Timestamp is authoritative; Date field has data-entry errors
-      const dt = new Date(raw);
-      if (isNaN(dt)) return null;
-      const dy = dt.getUTCDate();
-      const mn = dt.getUTCMonth() + 1;
-      const yr = dt.getUTCFullYear();
+      const dt = parseRowDate(raw);
+      if (!dt) return null;
+      const ist = new Date(dt.getTime() + IST_OFFSET_MS);
+      const dy = ist.getUTCDate();
+      const mn = ist.getUTCMonth() + 1;
+      const yr = ist.getUTCFullYear();
       const mo_name = MONTH_NAMES[mn] || '?';
       const sk = `${yr}-${String(mn).padStart(2, '0')}-${String(dy).padStart(2, '0')}`;
+      const mk = sk.slice(0, 7);                       // "2026-04" — sortable, year-aware month key
+      const moLabel = `${mo_name} ${yr}`;              // "Apr 2026" — display label
       const disp = `${String(dy).padStart(2, '0')} ${MONTH_NAMES[mn]}`;
-      const qty = parseInt(r['Quantity'] || r['qty'] || 0);
+      // Robust quantity parse: tolerate "1,200", " 80 ", numeric or string
+      const qty = Math.round(Number(String(r['Quantity'] ?? r['qty'] ?? 0).replace(/[^0-9.\-]/g, ''))) || 0;
       const io = (r['In/Out'] || '').toLowerCase();
       if (io && io !== 'out') return null; // only count outbound
 
@@ -2329,7 +2356,7 @@
       }
 
       return {
-        d: disp, sk, mo: mo_name, sku, sty, sz, qty, stock,
+        d: disp, sk, mo: mo_name, mk, moLabel, sku, sty, sz, qty, stock,
         ts: dt.getTime(),               // for sorting to find latest stock per SKU
         bill: r['Bill no/name'] || r['Billnoname'] || r['bill'] || '',
         party: r['Party Name'] || r['PartyName'] || r['party'] || ''
@@ -2354,10 +2381,8 @@
         DATA = norm;
         buildStockMap();
         saveCache();
-        ['f-sz', 'f-party'].forEach(id => {
-          const s = el(id);
-          while (s.options.length > 1) s.remove(1);
-        });
+        // populateSels/fill rebuild all dropdown options in place and keep
+        // the user's current selections when still valid.
         populateSels();
         populateCricketMonths();
         populateMonthCompare();
@@ -2480,13 +2505,15 @@
     // ═══ FILTER ═══════════════════════════════════════════════════════
     let FILTERED = [...DATA];
     function applyFilter() {
-      const mo   = v('f-mo');
+      const mo   = v('f-mo');          // year-aware month key, e.g. "2026-04"
       const sz   = v('f-sz');
       const py   = v('f-party');
-      const from = v('f-from');
-      const to   = v('f-to');
+      let from = v('f-from');
+      let to   = v('f-to');
+      // Robustness: if the user picks a reversed range, treat it as swapped
+      if (from && to && from > to) { const t = from; from = to; to = t; }
       FILTERED = DATA.filter(r => {
-        if (mo   && r.mo      !== mo)   return false;
+        if (mo   && r.mk      !== mo)   return false;
         if (sz   && r.sz      !== sz)   return false;
         if (py   && r.party   !== py)   return false;
         if (from && r.sk      <  from)  return false;
@@ -2501,7 +2528,7 @@
       el('f-from').value = '';
       el('f-to').value   = '';
       el('f-week').classList.remove('week-active');
-      ['lb-party-q', 'lb-sku-q'].forEach(id => { const e = el(id); if (e) e.value = ''; });
+      ['lb-party-q', 'lb-sku-q', 'tbl-q'].forEach(id => { const e = el(id); if (e) e.value = ''; });
       FILTERED = [...DATA];
       renderAll();
     }
@@ -2567,14 +2594,34 @@
     function set(id, t) { const e = el(id); if (e) e.textContent = t }
 
     // ═══ POPULATE SELECTS ═════════════════════════════════════════════
+    // Month keys ("2026-04") -> labels ("Apr 2026"), chronological.
+    function monthKeysInData() {
+      const map = {};
+      DATA.forEach(r => { if (r.mk) map[r.mk] = r.moLabel; });
+      return Object.keys(map).sort().map(mk => ({ mk, label: map[mk] }));
+    }
     function populateSels() {
-      const sizes = [...new Set(DATA.map(r => r.sz))].sort();
-      const parties = [...new Set(DATA.map(r => r.party))].sort();
+      const sizes = [...new Set(DATA.map(r => r.sz))].filter(Boolean).sort();
+      const parties = [...new Set(DATA.map(r => r.party))].filter(Boolean).sort();
       fill('f-sz', sizes);
       fill('f-party', parties);
+      fill('f-mo', monthKeysInData().map(m => [m.mk, m.label]));
     }
+    // Rebuild a select's options (keeping the first "All …" option) and
+    // PRESERVE the current selection if it still exists — so a background
+    // refresh never silently wipes an active filter.
     function fill(id, arr) {
-      const s = el(id); arr.forEach(v => { const o = document.createElement('option'); o.value = o.textContent = v; s.appendChild(o) });
+      const s = el(id); if (!s) return;
+      const prev = s.value;
+      while (s.options.length > 1) s.remove(1);
+      arr.forEach(item => {
+        const o = document.createElement('option');
+        if (Array.isArray(item)) { o.value = item[0]; o.textContent = item[1]; }
+        else { o.value = o.textContent = item; }
+        s.appendChild(o);
+      });
+      if (prev && [...s.options].some(o => o.value === prev)) s.value = prev;
+      else if (prev) s.value = '';   // stale selection no longer in data
     }
 
     // ═══ LAUNCH ═══════════════════════════════════════════════════════
@@ -2736,28 +2783,31 @@
       // Default the trend to the two most-recent months present (last + current).
       // FILTERED already reflects active month/date filters, so an explicit
       // single-month or date-range filter still narrows this further.
-      const ORDER = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const monthsPresent = [...new Set(FILTERED.map(r => r.mo))].filter(m => m && m !== '?')
-        .sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+      // Months are keyed by "YYYY-MM" so sorting is chronological across
+      // year boundaries (Dec 2026 < Jan 2027) — plain names would sort wrong.
+      const monthsPresent = [...new Set(FILTERED.map(r => r.mk))].filter(Boolean).sort();
       const keepMonths = monthsPresent.slice(-2);              // two latest months
-      const olderMo = keepMonths.length === 2 ? keepMonths[0] : null;
-      const newerMo = keepMonths[keepMonths.length - 1] || null;
-      const rows = FILTERED.filter(r => keepMonths.includes(r.mo));
+      const olderMk = keepMonths.length === 2 ? keepMonths[0] : null;
+      const newerMk = keepMonths[keepMonths.length - 1] || null;
+      const rows = FILTERED.filter(r => keepMonths.includes(r.mk));
+      const labelOf = {};
+      rows.forEach(r => { labelOf[r.mk] = r.moLabel; });
+      const olderMo = olderMk ? labelOf[olderMk] : null;
+      const newerMo = newerMk ? labelOf[newerMk] : null;
 
       const dm = {};
-      rows.forEach(r => { if (!dm[r.sk]) dm[r.sk] = { d: r.d, qty: 0, mo: r.mo }; dm[r.sk].qty += r.qty });
+      rows.forEach(r => { if (!dm[r.sk]) dm[r.sk] = { d: r.d, qty: 0, mk: r.mk }; dm[r.sk].qty += r.qty });
       const keys = Object.keys(dm).sort();
       const labels = keys.map(k => dm[k].d);
       const vals = keys.map(k => dm[k].qty);
       // older month = blue, newer (current) month = teal
-      const colors = keys.map(k => dm[k].mo === newerMo ? '#0891b2' : '#2563eb');
+      const colors = keys.map(k => dm[k].mk === newerMk ? '#0891b2' : '#2563eb');
       const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
 
       // Update the card badge + subtitle to reflect the months actually shown
-      const yr = keys.length ? keys[keys.length - 1].slice(0, 4) : '';
       const badgeEl = el('trend-badge');
       if (badgeEl) badgeEl.textContent =
-        (olderMo ? olderMo.toUpperCase() + ' · ' : '') + (newerMo ? newerMo.toUpperCase() : '') + (yr ? ' ' + yr : '');
+        (olderMo ? olderMo.toUpperCase() + ' · ' : '') + (newerMo ? newerMo.toUpperCase() : '');
       const subEl = el('trend-sub');
       if (subEl) subEl.textContent = olderMo
         ? `Quantity per day — blue=${olderMo}, teal=${newerMo}, amber line=avg`
@@ -2783,27 +2833,49 @@
         yaxis: { ...GRID, tickfont: { size: 10 } },
         bargap: 0.3, hovermode: 'x unified', hoverlabel: HL,
         legend: { x: .02, y: .98, bgcolor: 'transparent', font: { size: 10 }, orientation: 'h' },
-        annotations: [{
+        annotations: vals.length ? [{
           x: labels[vals.indexOf(Math.max(...vals))], y: Math.max(...vals),
           text: 'Peak', showarrow: true, arrowhead: 2, arrowsize: .8, arrowcolor: '#e11d48',
           font: { size: 10, color: '#e11d48' }, bgcolor: 'rgba(255,255,255,.85)',
           borderpad: 3, ay: -28, ax: 0
-        }]
+        }] : []
       }, CFG);
     }
 
     // ─── SIZE DONUT ─────────────────────────────────────────────────────
     function renderSize() {
       const sm = groupBy(FILTERED, 'sz');
-      const labels = Object.keys(sm), vals = labels.map(k => sm[k]);
+      // Sort by volume; keep the top 6 sizes as their own slices and fold the
+      // small remainder into one slice so labels never overlap.
+      const entries = Object.entries(sm).sort((a, b) => b[1] - a[1]);
+      const TOP = 6;
+      const main = entries.slice(0, TOP);
+      const rest = entries.slice(TOP);
+      const restQty = rest.reduce((a, e) => a + e[1], 0);
+      // "+N MORE" (not "OTHERS") — the data itself has an "OTHER" size bucket
+      // for SKUs without a WxL size in the name; avoid two identical labels.
+      if (restQty > 0) main.push([`+${rest.length} MORE`, restQty]);
+      const labels = main.map(e => e[0]);
+      const vals = main.map(e => e[1]);
+      const total = vals.reduce((a, b) => a + b, 0);
+
       Plotly.newPlot('ch-size', [{
-        type: 'pie', hole: .58, labels, values: vals,
+        type: 'pie', hole: .58, labels, values: vals, sort: false, direction: 'clockwise',
         marker: { colors: PAL.slice(0, labels.length), line: { color: '#fff', width: 2 } },
-        textinfo: 'label+percent', textfont: { size: 11 }, pull: .03,
+        // Labels sit INSIDE the slices — no outside leader-lines to tangle.
+        // Slices too small to fit a label stay clean (legend + hover cover them).
+        textinfo: 'label+percent', textposition: 'inside',
+        insidetextorientation: 'horizontal',
+        textfont: { size: 11, color: '#fff' },
         hovertemplate: '<b>%{label}</b><br>%{value:,} units · %{percent}<extra></extra>'
       }], {
         ...BASE, margin: { t: 8, r: 8, b: 8, l: 8 }, showlegend: true,
+        uniformtext: { minsize: 10, mode: 'hide' },
         legend: { x: .5, y: -.05, xanchor: 'center', orientation: 'h', font: { size: 10 } },
+        annotations: [{
+          text: `<b style="font-size:17px">${fmtN(total)}</b><br><span style="font-size:10px">units</span>`,
+          showarrow: false, font: { size: 12, color: '#0f172a', family: 'Poppins' }, x: .5, y: .5
+        }],
         hoverlabel: HL,
       }, CFG);
     }
@@ -2886,33 +2958,34 @@
     // most-recent months present: "Last Month" = 2nd-latest, "Current Month" = latest.
     // Preserves the user's current selection across background refreshes.
     function populateMonthCompare() {
-      const ORDER = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const allMo = [...new Set(DATA.map(r => r.mo))].filter(m => m && m !== '?');
-      allMo.sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+      const allMo = monthKeysInData();               // [{mk:"2026-04", label:"Apr 2026"}, …] chronological
 
       function fillSel(id, fallback) {
         const s = el(id);
         if (!s) return;
         const prev = s.value;                       // keep current choice if still valid
         while (s.options.length > 1) s.remove(1);
-        allMo.forEach(mo => {
+        allMo.forEach(m => {
           const o = document.createElement('option');
-          o.value = o.textContent = mo;
+          o.value = m.mk; o.textContent = m.label;
           s.appendChild(o);
         });
-        s.value = (prev && allMo.includes(prev)) ? prev : (fallback || '');
+        s.value = (prev && allMo.some(m => m.mk === prev)) ? prev : (fallback || '');
       }
 
-      fillSel('f-mc-prev', allMo.length >= 2 ? allMo[allMo.length - 2] : '');
-      fillSel('f-mc-cur',  allMo.length >= 1 ? allMo[allMo.length - 1] : '');
+      fillSel('f-mc-prev', allMo.length >= 2 ? allMo[allMo.length - 2].mk : '');
+      fillSel('f-mc-cur',  allMo.length >= 1 ? allMo[allMo.length - 1].mk : '');
     }
 
     function renderMonths() {
-      const moA = el('f-mc-prev') ? el('f-mc-prev').value : '';   // last month (optional)
-      const moB = el('f-mc-cur')  ? el('f-mc-cur').value  : '';   // current month
+      const moA = el('f-mc-prev') ? el('f-mc-prev').value : '';   // last month key (optional)
+      const moB = el('f-mc-cur')  ? el('f-mc-cur').value  : '';   // current month key
+      const monthLabel = mk => { const m = monthKeysInData().find(x => x.mk === mk); return m ? m.label : mk; };
+      const labA = moA ? monthLabel(moA) : '';
+      const labB = moB ? monthLabel(moB) : '';
 
       const titleEl = document.getElementById('months-title');
-      if (titleEl) titleEl.textContent = (moA && moB) ? `${moA} vs ${moB}` : (moB || 'Month vs Month');
+      if (titleEl) titleEl.textContent = (moA && moB) ? `${labA} vs ${labB}` : (labB || 'Month vs Month');
 
       if (!moB) { try { Plotly.purge('ch-months'); } catch {} return; }
 
@@ -2921,23 +2994,23 @@
       const aM = {}, bM = {};
       FILTERED.forEach(r => {
         if (!top7.includes(r.party)) return;
-        if (moA && r.mo === moA) aM[r.party] = (aM[r.party] || 0) + r.qty;
-        if (r.mo === moB)        bM[r.party] = (bM[r.party] || 0) + r.qty;
+        if (moA && r.mk === moA) aM[r.party] = (aM[r.party] || 0) + r.qty;
+        if (r.mk === moB)        bM[r.party] = (bM[r.party] || 0) + r.qty;
       });
       const labels = top7.map(p => trunc(p, 18));
 
       const traces = [];
       if (moA) {
         traces.push({
-          type: 'bar', name: moA, x: labels, y: top7.map(p => aM[p] || 0),
+          type: 'bar', name: labA, x: labels, y: top7.map(p => aM[p] || 0),
           marker: { color: '#2563eb', line: { width: 0 } },
-          hovertemplate: `<b>%{x}</b><br>${moA}: %{y:,}<extra></extra>`
+          hovertemplate: `<b>%{x}</b><br>${labA}: %{y:,}<extra></extra>`
         });
       }
       traces.push({
-        type: 'bar', name: moB, x: labels, y: top7.map(p => bM[p] || 0),
+        type: 'bar', name: labB, x: labels, y: top7.map(p => bM[p] || 0),
         marker: { color: '#0891b2', line: { width: 0 } },
-        hovertemplate: `<b>%{x}</b><br>${moB}: %{y:,}<extra></extra>`
+        hovertemplate: `<b>%{x}</b><br>${labB}: %{y:,}<extra></extra>`
       });
 
       Plotly.newPlot('ch-months', traces, {
@@ -2954,37 +3027,44 @@
     const C_LINE = ['#2563eb', '#0891b2', '#059669', '#d97706', '#7c3aed'];
 
     function populateCricketMonths() {
-      const ORDER = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const allMo = [...new Set(DATA.map(r => r.mo))].filter(m => m && m !== '?');
-      allMo.sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+      const allMo = monthKeysInData();               // year-aware, chronological
 
-      function fillSel(id, selected) {
+      function fillSel(id, fallback) {
         const s = el(id);
+        if (!s) return;
+        const prev = s.value;                       // keep current choice if still valid
         while (s.options.length > 1) s.remove(1);
-        allMo.forEach(mo => {
+        allMo.forEach(m => {
           const o = document.createElement('option');
-          o.value = o.textContent = mo;
+          o.value = m.mk; o.textContent = m.label;
           s.appendChild(o);
         });
-        if (selected) s.value = selected;
+        s.value = (prev && allMo.some(m => m.mk === prev)) ? prev : (fallback || '');
       }
 
-      fillSel('f-cricket-prev', allMo.length >= 2 ? allMo[allMo.length - 2] : '');
-      fillSel('f-cricket-cur',  allMo.length >= 1 ? allMo[allMo.length - 1] : '');
+      fillSel('f-cricket-prev', allMo.length >= 2 ? allMo[allMo.length - 2].mk : '');
+      fillSel('f-cricket-cur',  allMo.length >= 1 ? allMo[allMo.length - 1].mk : '');
     }
 
     function renderCricket() {
-      const DAYS_IN = { Jan:31,Feb:28,Mar:31,Apr:30,May:31,Jun:30,Jul:31,Aug:31,Sep:30,Oct:31,Nov:30,Dec:31 };
+      // Days in a "YYYY-MM" month key — correct for leap years too
+      function daysInMonth(mk) {
+        const [y, m] = mk.split('-').map(Number);
+        return (y && m) ? new Date(y, m, 0).getDate() : 30;
+      }
 
-      const curMo  = el('f-cricket-cur').value;
+      const curMo  = el('f-cricket-cur').value;          // month key "2026-07"
       const prevMo = el('f-cricket-prev').value || null;
+      const monthLabel = mk => { const m = monthKeysInData().find(x => x.mk === mk); return m ? m.label : mk; };
+      const curLab  = curMo ? monthLabel(curMo) : '';
+      const prevLab = prevMo ? monthLabel(prevMo) : '';
 
       if (!curMo) { try { Plotly.purge('ch-cricket'); } catch {} el('cricket-legend').innerHTML=''; el('cricket-stats').innerHTML=''; return; }
 
-      // day-level total map for a given month
-      function dayMap(mo) {
+      // day-level total map for a given month key
+      function dayMap(mk) {
         const m = {};
-        FILTERED.filter(r => r.mo === mo).forEach(r => {
+        FILTERED.filter(r => r.mk === mk).forEach(r => {
           const d = parseInt(r.sk.split('-')[2]);
           m[d] = (m[d] || 0) + r.qty;
         });
@@ -3011,24 +3091,24 @@
       // 1 · Prev month — soft grey bars
       if (prevMo) {
         traces.push({
-          type: 'bar', name: `${prevMo}`,
+          type: 'bar', name: `${prevLab}`,
           x: xAxis, y: prevVals,
           marker: { color: 'rgba(203,213,225,0.6)', line: { color: 'rgba(148,163,184,0.35)', width: 1 } },
-          hovertemplate: `<b>Day %{x}</b><br>${prevMo}: <b>%{y:,}</b> units<extra></extra>`,
+          hovertemplate: `<b>Day %{x}</b><br>${prevLab}: <b>%{y:,}</b> units<extra></extra>`,
         });
       }
 
       // 2 · Cur month — teal bars (grouped beside prev)
       traces.push({
-        type: 'bar', name: `${curMo}`,
+        type: 'bar', name: `${curLab}`,
         x: xAxis, y: curVals,
         marker: { color: 'rgba(37,99,235,0.75)', line: { color: 'rgba(37,99,235,0.3)', width: 1 } },
-        hovertemplate: `<b>Day %{x}</b><br>${curMo}: <b>%{y:,}</b> units<extra></extra>`,
+        hovertemplate: `<b>Day %{x}</b><br>${curLab}: <b>%{y:,}</b> units<extra></extra>`,
       });
 
       // 3 · Cur month spline overlay
       traces.push({
-        type: 'scatter', mode: 'lines+markers', name: `${curMo} Trend`,
+        type: 'scatter', mode: 'lines+markers', name: `${curLab} Trend`,
         x: xAxis, y: curVals,
         connectgaps: true,
         line: { color: '#2563eb', width: 2.5, shape: 'spline', smoothing: 1.1 },
@@ -3040,7 +3120,7 @@
       // 4 · Prev month spline overlay
       if (prevMo) {
         traces.push({
-          type: 'scatter', mode: 'lines', name: `${prevMo} Trend`,
+          type: 'scatter', mode: 'lines', name: `${prevLab} Trend`,
           x: xAxis, y: prevVals,
           connectgaps: true,
           line: { color: '#0891b2', width: 2, shape: 'spline', smoothing: 1.1, dash: 'dot' },
@@ -3075,8 +3155,8 @@
 
       // ── Legend strip ─────────────────────────────────────────────────
       const legItems = [
-        prevMo ? { col:'rgba(203,213,225,.8)', label:`${prevMo} (bars)`, shape:'bar', dotCol:'#0891b2' } : null,
-        { col:'rgba(37,99,235,.75)', label:`${curMo} (bars)`, shape:'bar2' },
+        prevMo ? { col:'rgba(203,213,225,.8)', label:`${prevLab} (bars)`, shape:'bar', dotCol:'#0891b2' } : null,
+        { col:'rgba(37,99,235,.75)', label:`${curLab} (bars)`, shape:'bar2' },
       ].filter(Boolean);
       el('cricket-legend').innerHTML = legItems.map(l => {
         const icon = l.shape === 'bar'
@@ -3088,8 +3168,8 @@
       // ── Stats strip ───────────────────────────────────────────────────
       const curTotal  = Object.values(curMap).reduce((a,b) => a+b, 0);
       const prevTotal = prevMo ? Object.values(prevMap).reduce((a,b) => a+b, 0) : 0;
-      const calDays   = DAYS_IN[curMo] || 30;
-      const prevCalDays = prevMo ? (DAYS_IN[prevMo] || 30) : 30;
+      const calDays   = daysInMonth(curMo);
+      const prevCalDays = prevMo ? daysInMonth(prevMo) : 30;
 
       // Days elapsed in current month (last day that has data)
       const daysElapsed = Object.keys(curMap).length > 0 ? Math.max(...Object.keys(curMap).map(Number)) : 1;
@@ -3118,7 +3198,7 @@
       <div style="background:var(--bg);border:1.5px solid var(--border);border-radius:14px;padding:16px 18px;transition:box-shadow .2s" onmouseenter="this.style.boxShadow='var(--sh-h)'" onmouseleave="this.style.boxShadow='none'">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <span style="font-size:22px">🎯</span>
-          <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">${prevMo || 'Prev'} Total Out (Target)</div>
+          <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">${prevLab || 'Prev'} Total Out (Target)</div>
         </div>
         <div style="font-size:30px;font-weight:800;color:var(--slate);letter-spacing:-.02em;line-height:1">${prevMo ? fmtN(prevTotal) : '-'}</div>
         ${prevMo ? `<div style="font-size:11px;color:var(--muted);margin-top:5px">${prevTotal.toLocaleString()} units · ${prevCalDays}-day month</div>
@@ -3129,7 +3209,7 @@
       <div style="background:var(--bt);border:1.5px solid var(--border);border-radius:14px;padding:16px 18px;transition:box-shadow .2s" onmouseenter="this.style.boxShadow='var(--sh-h)'" onmouseleave="this.style.boxShadow='none'">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <span style="font-size:22px">📦</span>
-          <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">${curMo} Total Out (So Far)</div>
+          <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">${curLab} Total Out (So Far)</div>
         </div>
         <div style="font-size:30px;font-weight:800;color:var(--blue);letter-spacing:-.02em;line-height:1">${fmtN(curTotal)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:5px">${curTotal.toLocaleString()} units · Day ${daysElapsed} of ${calDays}</div>
@@ -3189,7 +3269,7 @@
       <td><span class="sz-tag">${r.sz}</span></td>
       <td>${r.sty}</td>
       <td style="color:var(--muted)">${r.bill}</td>
-      <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:${r.mo === 'Apr' ? 'var(--bt)' : 'var(--tt)'};color:${r.mo === 'Apr' ? 'var(--blue)' : 'var(--teal)'}">${r.mo}</span></td>
+      <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:${parseInt(r.mk.slice(5)) % 2 ? 'var(--bt)' : 'var(--tt)'};color:${parseInt(r.mk.slice(5)) % 2 ? 'var(--blue)' : 'var(--teal)'}">${r.moLabel}</span></td>
       <td class="num">${r.qty.toLocaleString()}</td>
       <td>${stockCell}</td>
     </tr>`;
@@ -3308,7 +3388,11 @@
       if (from && to) parts.push(`${from} to ${to}`);
       else if (from) parts.push(`From ${from}`);
       else if (to)   parts.push(`Until ${to}`);
-      if (mo) parts.push(`Month: ${mo}`);
+      if (mo) {
+        const sel = el('f-mo');
+        const lab = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].textContent : mo;
+        parts.push(`Month: ${lab}`);
+      }
       if (sz) parts.push(`Size: ${sz}`);
       if (py) parts.push(`Party: ${py}`);
       return parts.length ? parts.join('  |  ') : 'All Data (no filters applied)';
@@ -3958,7 +4042,7 @@
 
       const rows = PDF_DATA.slice()
         .sort((a,b) => a.sk.localeCompare(b.sk))
-        .map((r,i) => [i+1, r.d, r.party, r.sku, r.sty, r.sz, r.bill, r.mo, fmtFull(r.qty)]);
+        .map((r,i) => [i+1, r.d, r.party, r.sku, r.sty, r.sz, r.bill, r.moLabel, fmtFull(r.qty)]);
 
       doc.autoTable({
         startY: y,
@@ -4190,27 +4274,28 @@
 
       drawHeader(doc, 'Month-over-Month Comparison', 'Monthly dispatch totals and party-wise breakdown');
 
-      // Group by month
+      // Group by year-aware month key so multi-year data never merges
+      // (e.g. Apr 2026 vs Apr 2027) and ordering is truly chronological.
       const monthMap = {};
+      const monthLabels = {};
       PDF_DATA.forEach(r => {
-        if (!monthMap[r.mo]) monthMap[r.mo] = { qty:0, parties:new Set(), skus:new Set(), bills:new Set(), days:new Set() };
-        monthMap[r.mo].qty += r.qty;
-        monthMap[r.mo].parties.add(r.party);
-        monthMap[r.mo].skus.add(r.sku);
-        monthMap[r.mo].bills.add(r.bill);
-        monthMap[r.mo].days.add(r.sk);
+        if (!monthMap[r.mk]) { monthMap[r.mk] = { qty:0, parties:new Set(), skus:new Set(), bills:new Set(), days:new Set() }; monthLabels[r.mk] = r.moLabel; }
+        monthMap[r.mk].qty += r.qty;
+        monthMap[r.mk].parties.add(r.party);
+        monthMap[r.mk].skus.add(r.sku);
+        monthMap[r.mk].bills.add(r.bill);
+        monthMap[r.mk].days.add(r.sk);
       });
-      const monthOrder = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      const months = monthOrder.filter(m => monthMap[m]);
+      const months = Object.keys(monthMap).sort();
 
       let y = 47;
       y = drawSectionTitle(doc, y, 'Monthly Summary', PDF_COL.blue);
       const monthRows = months.map((m, i) => {
         const cur = monthMap[m];
         const prev = i > 0 ? monthMap[months[i-1]] : null;
-        const growth = prev ? (((cur.qty - prev.qty) / prev.qty) * 100).toFixed(1) + '%' : '-';
+        const growth = (prev && prev.qty > 0) ? (((cur.qty - prev.qty) / prev.qty) * 100).toFixed(1) + '%' : '-';
         return [
-          m,
+          monthLabels[m],
           fmtFull(cur.qty),
           cur.parties.size,
           cur.skus.size,
@@ -4260,7 +4345,7 @@
         const row = [idx+1, pname];
         let pTotal = 0;
         months.forEach(m => {
-          const q = PDF_DATA.filter(r => r.party === pname && r.mo === m).reduce((a,r) => a + r.qty, 0);
+          const q = PDF_DATA.filter(r => r.party === pname && r.mk === m).reduce((a,r) => a + r.qty, 0);
           row.push(q > 0 ? fmtFull(q) : '-');
           pTotal += q;
         });
@@ -4269,7 +4354,7 @@
       });
       doc.autoTable({
         startY: y,
-        head: [['#', 'Customer', ...months, 'Total']],
+        head: [['#', 'Customer', ...months.map(m => monthLabels[m]), 'Total']],
         body: matrixBody,
         theme: 'grid',
         margin: { top: 44, bottom: 18, left: 14, right: 14 },
