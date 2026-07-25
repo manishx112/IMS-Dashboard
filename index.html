@@ -2455,6 +2455,7 @@
           <div style="font-size:12px;color:var(--muted);font-weight:500;margin-top:2px">
             Current stock levels at warehouse — drives manufacturing &amp; reorder decisions
           </div>
+          <div id="stk-source" style="margin-top:7px"></div>
         </div>
         <button class="btn-pdf-mini" onclick="exportPDF('stock-report')" title="Download full Stock Report as PDF">
           <svg viewBox="0 0 24 24">
@@ -2472,7 +2473,7 @@
             <div class="stock-title"><span class="dot r"></span> Out of Stock</div>
             <span class="stock-count" id="stk-out-count">— SKUs</span>
           </div>
-          <div class="stock-sub">Recently dispatched but stock = 0. Manufacture urgently.</div>
+          <div class="stock-sub">Closing stock = 0 at warehouse. Manufacture urgently.</div>
           <div class="stock-total-badge" id="stk-out-total">📦 Total Stock: —</div>
           <div style="margin-top:10px"></div>
           <div class="stock-list" id="stk-out-list"></div>
@@ -2548,6 +2549,7 @@
   <script>
     // ═══ LIVE API CONFIG ══════════════════════════════════════════════
     const API_URL = 'https://script.google.com/macros/s/AKfycbxSAfDIrjB7hjvv2vTNGlomYWFM1iU_t1XqlrPvM6zHHsbb5nToOBUtw8h7Xz-MQLRE/exec';
+    const STOCK_API_URL = 'https://script.google.com/macros/s/AKfycbxgVMRiyuTtf5zBzUUvQfsoGGNg2YofiEggbi2qzH8vzOEEkZWEKEzeGgWG50MuRXS7BQ/exec';
     const REFRESH_INTERVAL = 120000; // 120 seconds (kept for manual PDF-export safeguard only — auto-refresh disabled)
 
     // ═══ BAKED PRE-CACHE ══════════════════════════════════════════════
@@ -2679,7 +2681,11 @@
       try {
         const norm = await fetchData();
         DATA = norm;
-        buildStockMap();
+        // Refresh inventory FIRST, then let it build the map. Calling
+        // buildStockMap() before this would rebuild from dispatch data (because
+        // INVENTORY_RAW is only repopulated inside fetchInventoryData), briefly
+        // replacing real warehouse stock with the stale dispatch-sheet copy.
+        await fetchInventoryData();
         saveCache();
         // populateSels/fill rebuild all dropdown options in place and keep
         // the user's current selections when still valid.
@@ -2728,8 +2734,16 @@
       const instant = getInstantData();
       if (instant) {
         DATA = instant.data;
+        // Seed from the cached inventory snapshot so the very first paint already
+        // shows real warehouse stock. Without this the Inventory Status section
+        // renders from the dispatch fallback (~186 SKUs) until the stock API
+        // replies — and stays there permanently if that call ever fails.
+        const invC = loadInventoryCache();
+        if (invC) INVENTORY_RAW = invC.data;
         buildStockMap();
         launch();
+        // Fetch inventory API data in parallel for accurate stock sections
+        fetchInventoryData().then(() => { renderAll(); });
         const upEl = document.getElementById('last-updated');
         if (upEl) {
           if (instant.ts) {
@@ -2751,7 +2765,9 @@
       try {
         const norm = await fetchData();
         DATA = norm;
-        buildStockMap();
+        // fetchInventoryData() builds STOCK_MAP itself — from the inventory API
+        // when reachable, from dispatch data only as a last resort.
+        await fetchInventoryData();
         saveCache();
         launch();
         const now = new Date();
@@ -2767,22 +2783,135 @@
 
     // ═══ STATE ════════════════════════════════════════════════════════
     let DATA = [];
-    // STOCK_MAP: SKU -> { stock: number, sz: string, sty: string, lastSeen: 'DD MMM' }
-    // Built from DATA on every refresh. Stock is the latest non-null reading per SKU.
+    // STOCK_MAP: SKU -> { stock: number, sellQty: number, itemName: string, sz: string, sty: string }
+    // Now powered by the dedicated Inventory API for accurate closing stock + sell qty.
     let STOCK_MAP = {};
+    let INVENTORY_RAW = []; // raw inventory API response
+    // Which source STOCK_MAP was built from — 'inventory' (authoritative: every
+    // SKU in the warehouse) or 'dispatch' (degraded: only SKUs that have shipped,
+    // with a stale Stock value copied into the dispatch sheet). The two disagree
+    // badly (~417 SKUs / ~57K units vs ~186 SKUs / ~35K units), so the UI must
+    // say which one it is rather than present the fallback as real inventory.
+    let STOCK_SOURCE = 'none';
+
+    // ═══ INVENTORY CACHE ══════════════════════════════════════════════
+    // Cache the inventory payload separately from dispatch so a transient
+    // stock-API failure never silently drops the section back to the
+    // dispatch fallback (which under-reports stock by ~20,000 units).
+    const INV_CACHE_KEY = 'ims_inventory_cache_v1';
+
+    function saveInventoryCache() {
+      try {
+        localStorage.setItem(INV_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: INVENTORY_RAW }));
+      } catch (e) { /* quota / private-mode — ignore */ }
+    }
+
+    function loadInventoryCache() {
+      try {
+        const raw = localStorage.getItem(INV_CACHE_KEY);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (!(obj && Array.isArray(obj.data) && obj.data.length)) return null;
+        if (!obj.data[0] || !('SKU Code' in obj.data[0])) return null;  // wrong shape
+        return obj;
+      } catch (e) { return null; }
+    }
+
+    // Fetch inventory data from the dedicated stock API.
+    // Retries once, validates the payload, and — critically — never wipes a
+    // good STOCK_MAP on failure. We only degrade to the dispatch fallback when
+    // there is no inventory data available at all (live OR cached).
+    let _invInflight = null;
+    function fetchInventoryData() {
+      // De-dupe concurrent calls. On load, initDashboard() and fetchAndRefresh()
+      // both want inventory, firing two requests at the same endpoint. Whichever
+      // settled LAST won — so if one succeeded and the other failed (Apps Script
+      // readily throttles parallel requests), the failure's fallback path wiped
+      // the good map and the section silently showed dispatch-derived stock.
+      if (_invInflight) return _invInflight;
+      _invInflight = _fetchInventoryData().finally(() => { _invInflight = null; });
+      return _invInflight;
+    }
+
+    async function _fetchInventoryData() {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const resp = await fetch(STOCK_API_URL, { cache: 'no-store' });
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const json = await resp.json();
+          const rows = Array.isArray(json) ? json : (json.data || []);
+          if (!rows.length) throw new Error('empty inventory payload');
+          INVENTORY_RAW = rows;
+          saveInventoryCache();
+          buildStockMap();
+          return true;
+        } catch (e) {
+          console.warn(`Inventory API fetch failed (attempt ${attempt}/2):`, e);
+        }
+      }
+      // Live fetch exhausted — fall back to the last good inventory snapshot
+      // before resorting to dispatch-derived stock.
+      if (!INVENTORY_RAW.length) {
+        const c = loadInventoryCache();
+        if (c) {
+          INVENTORY_RAW = c.data;
+          console.warn('Using cached inventory snapshot from', new Date(c.ts).toLocaleString('en-IN'));
+        }
+      }
+      buildStockMap();   // inventory if we have any, dispatch fallback otherwise
+      return INVENTORY_RAW.length > 0;
+    }
 
     function buildStockMap() {
       STOCK_MAP = {};
-      // Sort by timestamp ascending so latest stock value overrides earlier ones.
-      // Skip rows with null stock — only valid readings update the map.
+      if (INVENTORY_RAW.length > 0) {
+        STOCK_SOURCE = 'inventory';
+        // ── PRIMARY: Use inventory API data ──
+        for (const row of INVENTORY_RAW) {
+          const sku = row['SKU Code'];
+          if (!sku) continue;
+          const rawStock = row['Closing Stock'];
+          let stock = null;
+          if (rawStock !== null && rawStock !== undefined && rawStock !== '#N/A') {
+            if (rawStock === '') {
+              stock = 0; // empty string means out of stock (0 on hand)
+            } else {
+              const n = Number(rawStock);
+              if (!isNaN(n)) stock = n;
+            }
+          }
+          const sellQty = Number(row['Sell QTY']) || 0;
+          const itemName = row['Item Name'] || '';
+          // Extract size from SKU code (e.g. "1841 28X32" → "28X32")
+          const parts = sku.split(' ');
+          const sz = parts.length > 1 ? parts[parts.length - 1] : '';
+          STOCK_MAP[sku] = {
+            stock: (stock !== null && !isNaN(stock)) ? stock : null,
+            sellQty: sellQty,
+            itemName: itemName,
+            sz: sz,
+            sty: itemName
+          };
+        }
+      } else {
+        // ── FALLBACK: Use dispatch DATA ──
+        buildStockMapFromDispatch();
+      }
+    }
+
+    // Fallback: build stock map from dispatch data (old method)
+    function buildStockMapFromDispatch() {
+      STOCK_MAP = {};
+      STOCK_SOURCE = 'dispatch';
       const sorted = DATA.slice().sort((a, b) => a.ts - b.ts);
       for (const r of sorted) {
         if (r.stock !== null && r.stock !== undefined) {
           STOCK_MAP[r.sku] = {
             stock: r.stock,
+            sellQty: 0,
+            itemName: r.sty || '',
             sz: r.sz,
-            sty: r.sty,
-            lastSeen: r.d
+            sty: r.sty
           };
         }
       }
@@ -3008,22 +3137,28 @@
 
     // ─── STOCK STATUS SECTION ──────────────────────────────────────────
     function renderStockStatus() {
-      // Build list of all SKUs with stock info, with their tier
-      const skuTotals = groupBy(FILTERED, 'sku'); // for showing "dispatched in this view"
-      const list = Object.entries(STOCK_MAP).map(([sku, info]) => ({
-        sku, stock: info.stock, sz: info.sz, sty: info.sty,
-        lastSeen: info.lastSeen,
-        dispQty: skuTotals[sku] || 0,
-        tier: stockTier(info.stock)
-      }));
+      // Build list of all SKUs with stock info from inventory API
+      const list = Object.entries(STOCK_MAP)
+        .filter(([, info]) => info.stock !== null) // skip unknown stock
+        .map(([sku, info]) => ({
+          sku,
+          stock: info.stock,
+          sellQty: info.sellQty || 0,
+          itemName: info.itemName || '',
+          sz: info.sz,
+          sty: info.sty,
+          tier: stockTier(info.stock)
+        }));
 
       const out = list.filter(x => x.tier === 'out')
-        // Prioritize ones recently dispatched (more urgent to manufacture)
-        .sort((a, b) => b.dispQty - a.dispQty);
+        // Prioritize ones with high sell qty (more urgent to manufacture)
+        .sort((a, b) => b.sellQty - a.sellQty || a.sku.localeCompare(b.sku));
       const low = list.filter(x => x.tier === 'low')
-        .sort((a, b) => a.stock - b.stock);
+        // Decreasing order of stock, then sell qty
+        .sort((a, b) => b.stock - a.stock || b.sellQty - a.sellQty);
       const high = list.filter(x => x.tier === 'high' || x.tier === 'healthy')
-        .sort((a, b) => b.stock - a.stock);
+        // Decreasing order of stock, then sell qty
+        .sort((a, b) => b.stock - a.stock || b.sellQty - a.sellQty);
 
       set('stk-out-count', `${out.length} SKU${out.length === 1 ? '' : 's'}`);
       set('stk-low-count', `${low.length} SKU${low.length === 1 ? '' : 's'}`);
@@ -3036,6 +3171,25 @@
       set('stk-out-total', `📦 Total Stock: ${fmtN(outTotal)} units`);
       set('stk-low-total', `📦 Total Stock: ${fmtN(lowTotal)} units`);
       set('stk-high-total', `📦 Total Stock: ${fmtN(highTotal)} units`);
+
+      // Source + reconcilable grand total. The three cards partition the same
+      // list, so out + low + high must equal the grand total — showing it makes
+      // any under-reporting (e.g. a silent dispatch fallback) obvious at a glance.
+      const grandTotal = outTotal + lowTotal + highTotal;
+      const srcEl = document.getElementById('stk-source');
+      if (srcEl) {
+        srcEl.innerHTML = STOCK_SOURCE === 'inventory'
+          ? `<span style="display:inline-flex;align-items:center;gap:6px;background:var(--gt);border:1px solid #a7f3d0;color:var(--green);
+                border-radius:99px;padding:4px 12px;font-size:11px;font-weight:700">
+               <span style="width:6px;height:6px;border-radius:50%;background:var(--green)"></span>
+               Live inventory feed · ${list.length} SKUs · ${fmtN(grandTotal)} units on hand
+             </span>`
+          : `<span style="display:inline-flex;align-items:center;gap:6px;background:var(--at);border:1px solid #fcd34d;color:var(--amber);
+                border-radius:99px;padding:4px 12px;font-size:11px;font-weight:700"
+                title="The Inventory API could not be reached. These figures come from the Stock column of the dispatch sheet, which only covers SKUs that have already shipped — totals will be understated.">
+               ⚠ Stock API unavailable — estimated from dispatch sheet · ${list.length} SKUs · ${fmtN(grandTotal)} units (understated)
+             </span>`;
+      }
 
       renderStockList('stk-out-list', out, 'out');
       renderStockList('stk-low-list', low, 'low');
@@ -3054,8 +3208,9 @@
       }
       cont.innerHTML = items.map(x => {
         const subParts = [];
-        if (x.dispQty > 0) subParts.push(`Recent dispatch: ${fmtN(x.dispQty)}`);
-        else subParts.push(`Last seen: ${x.lastSeen}`);
+        if (x.sellQty > 0) subParts.push(`Sold: ${fmtN(x.sellQty)}`);
+        if (x.itemName) subParts.push(x.itemName);
+        if (subParts.length === 0) subParts.push(x.sz || '—');
         return `
           <div class="stock-item">
             <div style="min-width:0;flex:1">
@@ -4692,13 +4847,16 @@
 
       // Build classified lists
       const skuDispatchTotals = groupBy(PDF_DATA, 'sku');
-      const all = Object.entries(STOCK_MAP).map(([sku, info]) => ({
-        sku, stock: info.stock, sz: info.sz, sty: info.sty,
-        lastSeen: info.lastSeen,
-        dispQty: skuDispatchTotals[sku] || 0,
-        tier: stockTier(info.stock)
-      }));
-      const out = all.filter(x => x.tier === 'out').sort((a, b) => b.dispQty - a.dispQty);
+      const all = Object.entries(STOCK_MAP)
+        .filter(([, info]) => info.stock !== null)
+        .map(([sku, info]) => ({
+          sku, stock: info.stock, sz: info.sz, sty: info.sty,
+          itemName: info.itemName || '',
+          sellQty: info.sellQty || 0,
+          dispQty: skuDispatchTotals[sku] || 0,
+          tier: stockTier(info.stock)
+        }));
+      const out = all.filter(x => x.tier === 'out').sort((a, b) => b.sellQty - a.sellQty);
       const low = all.filter(x => x.tier === 'low').sort((a, b) => a.stock - b.stock);
       const healthy = all.filter(x => x.tier === 'healthy').sort((a, b) => b.stock - a.stock);
       const high = all.filter(x => x.tier === 'high').sort((a, b) => b.stock - a.stock);
@@ -4745,13 +4903,13 @@
         y = drawSectionTitle(doc, y, sectionTitle + ` (${items.length})`, sectionColor);
 
         const head = includeUrgency
-          ? [['#', 'SKU', 'Size', 'Style', 'Stock', 'Recent Dispatch', 'Last Seen']]
-          : [['#', 'SKU', 'Size', 'Style', 'Stock', 'Last Seen']];
+          ? [['#', 'SKU', 'Size', 'Style', 'Stock', 'Sold Qty', 'Item Name']]
+          : [['#', 'SKU', 'Size', 'Style', 'Stock', 'Item Name']];
 
         const body = items.map((x, i) => {
           const row = [i + 1, x.sku, x.sz, trunc(x.sty || '-', 18), fmtFull(x.stock)];
-          if (includeUrgency) row.push(x.dispQty > 0 ? fmtFull(x.dispQty) + ' units' : '-');
-          row.push(x.lastSeen);
+          if (includeUrgency) row.push(x.sellQty > 0 ? fmtFull(x.sellQty) + ' units' : '-');
+          row.push(x.itemName || '-');
           return row;
         });
 
