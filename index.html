@@ -3369,10 +3369,59 @@
       const r = Math.round(37 + (8 - 37) * t), g = Math.round(99 + (145 - 99) * t), b = Math.round(235 + (178 - 235) * t);
       return `rgb(${r},${g},${b})`;
     }
-    function fmtN(n) { return n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : n.toLocaleString() }
+    // Stock is null when the sheet holds "#N/A" (a broken VLOOKUP). Guard here:
+    // the old body called n.toLocaleString() on null, which threw a TypeError
+    // and killed the whole SKU leaderboard + dispatch table mid-render.
+    function fmtN(n) {
+      if (n === null || n === undefined || (typeof n === 'number' && isNaN(n))) return '—';
+      return n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : n.toLocaleString();
+    }
     function trunc(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s }
+
+    // Rows whose Party Name / Bill is blank in the sheet still carry real units,
+    // so they must stay in the totals — but they get an explicit label rather
+    // than a bare "?" that reads like a rendering glitch.
+    const BLANK_LABEL = '(no name in sheet)';
     function groupBy(data, key) {
-      const m = {}; data.forEach(r => { const k = r[key] || '?'; m[k] = (m[k] || 0) + r.qty }); return m;
+      const m = {}; data.forEach(r => { const k = r[key] || BLANK_LABEL; m[k] = (m[k] || 0) + r.qty }); return m;
+    }
+
+    // Escape values that come from the sheet before they go into innerHTML.
+    // A party name containing < or & would otherwise corrupt the markup.
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Distinct non-blank values — what "unique customers" and "unique bills"
+    // actually mean. Counting the blank bucket inflated both KPIs by one.
+    function countNamed(rows, key) {
+      const s = new Set();
+      rows.forEach(r => { if (r[key]) s.add(r[key]); });
+      return s.size;
+    }
+    function countBlank(rows, key) {
+      let n = 0; rows.forEach(r => { if (!r[key]) n++; }); return n;
+    }
+
+    // Blank a chart without destroying its Plotly instance.
+    //
+    // Plotly.purge() nulls gd._fullLayout. The party bar and month chart use
+    // automargin, which schedules an async relayout — if a purge lands while
+    // that promise is in flight the continuation throws
+    // "Cannot read properties of undefined (reading '_redrawFromAutoMarginCount')".
+    // Re-rendering with no traces leaves the instance intact, so the pending
+    // callback finds a valid layout and exits quietly.
+    function clearChart(id) {
+      const node = document.getElementById(id);
+      if (!node) return;
+      try {
+        Plotly.react(node, [], {
+          ...BASE, margin: { t: 8, r: 8, b: 8, l: 8 },
+          xaxis: { visible: false }, yaxis: { visible: false }
+        }, CFG);
+      } catch (e) { node.innerHTML = ''; }
     }
 
     // ═══ RENDER ALL ═══════════════════════════════════════════════════
@@ -3391,14 +3440,22 @@
     // ─── KPIs ──────────────────────────────────────────────────────────
     function renderKPIs() {
       const total = FILTERED.reduce((a, r) => a + r.qty, 0);
-      const parties = new Set(FILTERED.map(r => r.party)).size;
-      const skus = new Set(FILTERED.map(r => r.sku)).size;
-      const bills = new Set(FILTERED.map(r => r.bill)).size;
+      // Count only NAMED parties/bills. A blank cell in the sheet is not a
+      // customer — counting it made "Active Parties" read one higher than the
+      // number of customers that actually exist (and higher than the party
+      // dropdown, which has always filtered blanks out).
+      const parties = countNamed(FILTERED, 'party');
+      const skus = countNamed(FILTERED, 'sku');
+      const bills = countNamed(FILTERED, 'bill');
       const days = new Set(FILTERED.map(r => r.sk)).size;
+      const noParty = countBlank(FILTERED, 'party');
+      const noBill = countBlank(FILTERED, 'bill');
       set('kv-0', fmtN(total)); set('ks-0', `across ${days} dispatch days`);
-      set('kv-1', parties); set('ks-1', `unique customer parties`);
+      set('kv-1', parties);
+      set('ks-1', noParty ? `named customers · ${noParty} row${noParty === 1 ? '' : 's'} have no party name` : 'unique customer parties');
       set('kv-2', skus); set('ks-2', `distinct SKUs in this view`);
-      set('kv-3', bills); set('ks-3', `unique bill numbers`);
+      set('kv-3', bills);
+      set('ks-3', noBill ? `numbered bills · ${noBill} row${noBill === 1 ? '' : 's'} have no bill no.` : 'unique bill numbers');
 
       // Stock alerts KPI — count out-of-stock + low across ALL known stock
       let out = 0, low = 0, healthy = 0, high = 0;
@@ -3414,10 +3471,13 @@
       const subParts = [];
       if (out > 0) subParts.push(`${out} out`);
       if (low > 0) subParts.push(`${low} low`);
+      // This KPI is warehouse-wide on purpose — stock levels do not belong to a
+      // filtered slice of dispatches. Say so, since every other KPI in the row
+      // DOES follow the filters and the difference is otherwise invisible.
       if (subParts.length === 0) {
-        set('ks-4', `all ${healthy + high} SKUs healthy`);
+        set('ks-4', `all ${healthy + high} SKUs healthy · whole warehouse`);
       } else {
-        set('ks-4', subParts.join(' · ') + ' — action needed');
+        set('ks-4', subParts.join(' · ') + ' — whole warehouse, ignores filters');
       }
       // Color the stock KPI based on severity
       const kpiCard = document.getElementById('kpi-stock');
@@ -3518,8 +3578,8 @@
         return `
           <div class="stock-item">
             <div style="min-width:0;flex:1">
-              <div class="stock-item-name">${x.sku}</div>
-              <div class="stock-item-sub">${subParts.join(' · ')}</div>
+              <div class="stock-item-name">${esc(x.sku)}</div>
+              <div class="stock-item-sub">${esc(subParts.join(' · '))}</div>
             </div>
             <div class="stock-item-val">${fmtN(x.stock)}</div>
           </div>
@@ -3693,12 +3753,16 @@
         if (key === 'sku' && STOCK_MAP[name]) {
           const s = STOCK_MAP[name].stock;
           const tier = stockTier(s);
-          const label = tier === 'out' ? '0 stock' : `${fmtN(s)} stock`;
+          const label = tier === 'out' ? '0 stock'
+            : tier === 'unknown' ? 'stock unknown' : `${fmtN(s)} stock`;
+          // 'unknown' used to fall through this chain to "Well-stocked" — a SKU
+          // with no stock figure at all was being described as well stocked.
           const title = tier === 'out' ? 'OUT OF STOCK - manufacture urgently'
             : tier === 'low' ? 'Low stock - reorder soon'
               : tier === 'healthy' ? 'Healthy stock level'
-                : 'Well-stocked';
-          stockPill = `<span class="stk-pill ${tier}" title="${title}">${label}</span>`;
+                : tier === 'high' ? 'Well-stocked'
+                  : 'No stock figure for this SKU in the inventory sheet';
+          stockPill = `<span class="stk-pill ${tier}" title="${esc(title)}">${esc(label)}</span>`;
         }
 
         // SKU rows stack the garment type under the code; party rows keep the
@@ -3706,10 +3770,10 @@
         const type = key === 'sku' ? (typeOf[name] || '') : '';
         const nameCell = type
           ? `<span class="lb-name-wrap">
-               <span class="lb-name" title="${name}">${trunc(name, 22)}</span>
-               <span class="lb-type" title="${type}">${trunc(type, 24)}</span>
+               <span class="lb-name" title="${esc(name)}">${esc(trunc(name, 22))}</span>
+               <span class="lb-type" title="${esc(type)}">${esc(trunc(type, 24))}</span>
              </span>`
-          : `<span class="lb-name" title="${name}">${trunc(name, 24)}</span>`;
+          : `<span class="lb-name" title="${esc(name)}">${esc(trunc(name, 24))}</span>`;
 
         return `<div class="lb-row">
       <span class="lb-rank ${rankCls}">${medal}</span>
@@ -3746,24 +3810,37 @@
     // Populate the two month dropdowns from the dataset. Defaults to the two
     // most-recent months present: "Last Month" = 2nd-latest, "Current Month" = latest.
     // Preserves the user's current selection across background refreshes.
+    // Repopulate one month <select>, shared by both comparison cards.
+    //
+    // The previous version preserved ANY existing value — including a default
+    // the code had picked itself. So as soon as a new month appeared in the
+    // sheet, both "Current Month" selects stayed pinned to the old one: on
+    // 04 Sep the progress card was still charting August and labelling it the
+    // current month. A default now follows the data; only a month the USER
+    // actually chose is preserved across refreshes.
+    function fillMonthSel(id, fallback) {
+      const s = el(id);
+      if (!s) return;
+      const allMo = monthKeysInData();
+      if (!s.dataset.bound) {
+        s.dataset.bound = '1';
+        s.addEventListener('change', () => { s.dataset.userPicked = '1'; });
+      }
+      const prev = s.value;
+      const keep = s.dataset.userPicked === '1' && prev && allMo.some(m => m.mk === prev);
+      while (s.options.length > 1) s.remove(1);
+      allMo.forEach(m => {
+        const o = document.createElement('option');
+        o.value = m.mk; o.textContent = m.label;
+        s.appendChild(o);
+      });
+      s.value = keep ? prev : (fallback || '');
+    }
+
     function populateMonthCompare() {
       const allMo = monthKeysInData();               // [{mk:"2026-04", label:"Apr 2026"}, …] chronological
-
-      function fillSel(id, fallback) {
-        const s = el(id);
-        if (!s) return;
-        const prev = s.value;                       // keep current choice if still valid
-        while (s.options.length > 1) s.remove(1);
-        allMo.forEach(m => {
-          const o = document.createElement('option');
-          o.value = m.mk; o.textContent = m.label;
-          s.appendChild(o);
-        });
-        s.value = (prev && allMo.some(m => m.mk === prev)) ? prev : (fallback || '');
-      }
-
-      fillSel('f-mc-prev', allMo.length >= 2 ? allMo[allMo.length - 2].mk : '');
-      fillSel('f-mc-cur', allMo.length >= 1 ? allMo[allMo.length - 1].mk : '');
+      fillMonthSel('f-mc-prev', allMo.length >= 2 ? allMo[allMo.length - 2].mk : '');
+      fillMonthSel('f-mc-cur', allMo.length >= 1 ? allMo[allMo.length - 1].mk : '');
     }
 
     function renderMonths() {
@@ -3776,15 +3853,29 @@
       const titleEl = document.getElementById('months-title');
       if (titleEl) titleEl.textContent = (moA && moB) ? `${labA} vs ${labB}` : (labB || 'Month vs Month');
 
-      if (!moB) { try { Plotly.purge('ch-months'); } catch { } return; }
+      if (!moB) { clearChart('ch-months'); return; }
+
+      // Same trap as the progress card: the selects list every month in DATA,
+      // but the bars are built from FILTERED. If neither chosen month survives
+      // the active filter, an all-zero chart is a lie — say nothing instead.
+      const hasB = FILTERED.some(r => r.mk === moB);
+      const hasA = moA ? FILTERED.some(r => r.mk === moA) : false;
+      if (!hasA && !hasB) {
+        clearChart('ch-months');
+        if (titleEl) titleEl.textContent = `${labB} — not in the current filter`;
+        return;
+      }
 
       const pm = groupBy(FILTERED, 'party');
       const top7 = Object.entries(pm).sort((a, b) => b[1] - a[1]).slice(0, 7).map(e => e[0]);
       const aM = {}, bM = {};
       FILTERED.forEach(r => {
-        if (!top7.includes(r.party)) return;
-        if (moA && r.mk === moA) aM[r.party] = (aM[r.party] || 0) + r.qty;
-        if (r.mk === moB) bM[r.party] = (bM[r.party] || 0) + r.qty;
+        // groupBy() keys blanks as BLANK_LABEL, so match on the same key —
+        // comparing against the raw r.party silently dropped those rows.
+        const pk = r.party || BLANK_LABEL;
+        if (!top7.includes(pk)) return;
+        if (moA && r.mk === moA) aM[pk] = (aM[pk] || 0) + r.qty;
+        if (r.mk === moB) bM[pk] = (bM[pk] || 0) + r.qty;
       });
       const labels = top7.map(p => trunc(p, 18));
 
@@ -3817,22 +3908,8 @@
 
     function populateCricketMonths() {
       const allMo = monthKeysInData();               // year-aware, chronological
-
-      function fillSel(id, fallback) {
-        const s = el(id);
-        if (!s) return;
-        const prev = s.value;                       // keep current choice if still valid
-        while (s.options.length > 1) s.remove(1);
-        allMo.forEach(m => {
-          const o = document.createElement('option');
-          o.value = m.mk; o.textContent = m.label;
-          s.appendChild(o);
-        });
-        s.value = (prev && allMo.some(m => m.mk === prev)) ? prev : (fallback || '');
-      }
-
-      fillSel('f-cricket-prev', allMo.length >= 2 ? allMo[allMo.length - 2].mk : '');
-      fillSel('f-cricket-cur', allMo.length >= 1 ? allMo[allMo.length - 1].mk : '');
+      fillMonthSel('f-cricket-prev', allMo.length >= 2 ? allMo[allMo.length - 2].mk : '');
+      fillMonthSel('f-cricket-cur', allMo.length >= 1 ? allMo[allMo.length - 1].mk : '');
     }
 
     function renderCricket() {
@@ -3848,7 +3925,7 @@
       const curLab = curMo ? monthLabel(curMo) : '';
       const prevLab = prevMo ? monthLabel(prevMo) : '';
 
-      if (!curMo) { try { Plotly.purge('ch-cricket'); } catch { } el('cricket-legend').innerHTML = ''; el('cricket-stats').innerHTML = ''; return; }
+      if (!curMo) { clearChart('ch-cricket'); el('cricket-legend').innerHTML = ''; el('cricket-stats').innerHTML = ''; return; }
 
       // day-level total map for a given month key
       function dayMap(mk) {
@@ -3862,6 +3939,21 @@
 
       const curMap = dayMap(curMo);
       const prevMap = prevMo ? dayMap(prevMo) : {};
+
+      // The month dropdowns list every month in DATA, but this chart reads
+      // FILTERED. With a filter active that excludes both chosen months, the
+      // card used to paint a complete set of zeros — "0 units", "Avg/day: 0",
+      // "Day 1 of 31", "N/A target" — which reads like a real, catastrophic
+      // month rather than "your filter excluded this data".
+      if (!Object.keys(curMap).length && !Object.keys(prevMap).length) {
+        clearChart('ch-cricket');
+        el('cricket-legend').innerHTML = '';
+        el('cricket-stats').innerHTML =
+          `<div class="stock-empty" style="grid-column:1/-1">No dispatches for ${esc(curLab)}` +
+          (prevMo ? ` or ${esc(prevLab)}` : '') +
+          ` in the current filter — clear the filters above, or pick a month that is in view.</div>`;
+        return;
+      }
 
       // unified day axis 1–max day seen
       const maxDay = Math.max(
@@ -4034,15 +4126,23 @@
       const q = (el('tbl-q').value || '').toLowerCase();
       const rows = FILTERED.filter(r => !q || r.party.toLowerCase().includes(q) || r.sku.toLowerCase().includes(q) || r.bill.toLowerCase().includes(q));
       const sorted = [...rows].sort((a, b) => b.sk.localeCompare(a.sk));
-      const shown = sorted.slice(0, 500);
-      set('tbl-cnt', `${rows.length.toLocaleString()} records`);
+      const CAP = 500;
+      const shown = sorted.slice(0, CAP);
+      // Say when the list is truncated. The count used to read "1,750 records"
+      // above a table holding 500 rows, so scrolling to the bottom looked like
+      // the end of the data. (PDF exports are never capped.)
+      set('tbl-cnt', rows.length > CAP
+        ? `showing latest ${CAP} of ${rows.length.toLocaleString()} records`
+        : `${rows.length.toLocaleString()} records`);
       const pm = groupBy(FILTERED, 'party'), sm = groupBy(FILTERED, 'sku');
       const topP = Object.keys(pm).sort((a, b) => pm[b] - pm[a]);
       const topS = Object.keys(sm).sort((a, b) => sm[b] - sm[a]);
       el('tbl-body').innerHTML = shown.map((r, i) => {
-        const pRank = topP.indexOf(r.party), sRank = topS.indexOf(r.sku);
-        const pM = pRank < 3 ? ['🥇', '🥈', '🥉'][pRank] : '';
-        const sM = sRank < 3 ? ['🥇', '🥈', '🥉'][sRank] : '';
+        // Match on the same keys groupBy() produced, and guard the -1 miss —
+        // indexOf returns -1, and -1 < 3 was passing into MEDALS[-1].
+        const pRank = topP.indexOf(r.party || BLANK_LABEL), sRank = topS.indexOf(r.sku || BLANK_LABEL);
+        const pM = pRank >= 0 && pRank < 3 ? ['🥇', '🥈', '🥉'][pRank] : '';
+        const sM = sRank >= 0 && sRank < 3 ? ['🥇', '🥈', '🥉'][sRank] : '';
         // Use latest SKU stock (from STOCK_MAP) rather than row's possibly-stale stock
         const stk = STOCK_MAP[r.sku];
         let stockCell = '<span style="color:var(--faint);font-size:11px">—</span>';
@@ -4053,11 +4153,11 @@
         return `<tr>
       <td style="color:var(--faint)">${i + 1}</td>
       <td style="font-weight:600">${r.d}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${pM ? `<span class="rank-medal">${pM}</span> ` : ''}${r.party}</td>
-      <td style="font-weight:700;color:var(--blue)">${sM ? `<span class="rank-medal">${sM}</span> ` : ''}${r.sku}</td>
-      <td><span class="sz-tag">${r.sz}</span></td>
-      <td>${r.sty}</td>
-      <td style="color:var(--muted)">${r.bill}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${pM ? `<span class="rank-medal">${pM}</span> ` : ''}${esc(r.party || BLANK_LABEL)}</td>
+      <td style="font-weight:700;color:var(--blue)">${sM ? `<span class="rank-medal">${sM}</span> ` : ''}${esc(r.sku)}</td>
+      <td><span class="sz-tag">${esc(r.sz)}</span></td>
+      <td>${esc(r.sty)}</td>
+      <td style="color:var(--muted)">${esc(r.bill)}</td>
       <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:${parseInt(r.mk.slice(5)) % 2 ? 'var(--bt)' : 'var(--tt)'};color:${parseInt(r.mk.slice(5)) % 2 ? 'var(--blue)' : 'var(--teal)'}">${r.moLabel}</span></td>
       <td class="num">${r.qty.toLocaleString()}</td>
       <td>${stockCell}</td>
@@ -4592,7 +4692,10 @@
         if (stk) {
           const tier = stockTier(stk.stock);
           const tag = tier === 'out' ? 'OUT' : tier === 'low' ? 'LOW' : tier === 'healthy' ? 'OK' : tier === 'high' ? 'HIGH' : '';
-          stockCell = stk.stock === 0 ? '0 (OUT)' : `${fmtFull(stk.stock)} (${tag})`;
+          // An unknown stock figure used to render as "0 ()" — indistinguishable
+          // from a genuine zero, i.e. reported as out of stock.
+          stockCell = tier === 'unknown' ? 'no data'
+            : stk.stock === 0 ? '0 (OUT)' : `${fmtFull(stk.stock)} (${tag})`;
         }
         return [rankLabel, r.name, fmtFull(r.qty), r.share + '%', stockCell];
       });
@@ -4985,7 +5088,11 @@
       drawKpiBox(doc, 14, y, boxW, 24, 'Total Units', fmtFull(totalQty), `${share}% of overall`, PDF_COL.blue);
       drawKpiBox(doc, 14 + boxW + 4, y, boxW, 24, 'Rank', '#' + rank, `Out of ${partyLB.length}`, PDF_COL.amber);
       drawKpiBox(doc, 14 + (boxW + 4) * 2, y, boxW, 24, 'Unique SKUs', fmtFull(skuCount), `Across ${billCount} bills`, PDF_COL.teal);
-      drawKpiBox(doc, 14 + (boxW + 4) * 3, y, boxW, 24, 'Active Days', fmtFull(dayCount), `Last: ${recs[recs.length - 1].d}`, PDF_COL.green);
+      // recs preserves API row order, which is NOT chronological — the old
+      // recs[recs.length-1] printed whatever happened to be last in the sheet
+      // and labelled it the customer's most recent dispatch.
+      const lastRec = recs.reduce((b, r) => (r.sk > b.sk ? r : b), recs[0]);
+      drawKpiBox(doc, 14 + (boxW + 4) * 3, y, boxW, 24, 'Active Days', fmtFull(dayCount), `Last: ${lastRec.d}`, PDF_COL.green);
       y += 30;
 
       // SKU breakdown
@@ -5169,7 +5276,7 @@
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pw = doc.internal.pageSize.getWidth();
 
-      drawHeader(doc, 'Stock Report', 'Current warehouse inventory by SKU - reorder priorities');
+      drawHeader(doc, 'Stock Report', 'Whole warehouse, every SKU - dispatch filters do NOT apply here');
 
       // Build classified lists
       const skuDispatchTotals = groupBy(PDF_DATA, 'sku');
@@ -5271,7 +5378,7 @@
             5: { cellWidth: 24, halign: 'right', textColor: PDF_COL.muted }
           },
           alternateRowStyles: { fillColor: [250, 251, 253] },
-          didDrawPage: function () { drawHeader(doc, 'Stock Report', 'Current warehouse inventory by SKU - reorder priorities'); }
+          didDrawPage: function () { drawHeader(doc, 'Stock Report', 'Whole warehouse, every SKU - dispatch filters do NOT apply here'); }
         });
         y = doc.lastAutoTable.finalY + 8;
       }
